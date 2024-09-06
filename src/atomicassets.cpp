@@ -437,6 +437,11 @@ ACTION atomicassets::createtempl(
     int32_t template_id = current_config.template_counter++;
     config.set(current_config, get_self());
 
+    if (transferable == false){
+        check(burnable == true, 
+            "A template cannot be both non-transferable and non-burnable");
+    }
+
     templates_t collection_templates = get_templates(collection_name);
 
     collection_templates.emplace(authorized_creator, [&](auto &_template) {
