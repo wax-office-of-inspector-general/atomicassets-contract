@@ -770,9 +770,11 @@ ACTION atomicassets::backasset(
     uint64_t asset_id,
     asset token_to_back
 ) {
-    require_auth(payer);
+    check(false, 
+        "Native backing has been deprecated on the AtomicAssets Contract");
+    //require_auth(payer);
 
-    internal_back_asset(payer, asset_owner, asset_id, token_to_back);
+    //internal_back_asset(payer, asset_owner, asset_id, token_to_back);
 }
 
 
