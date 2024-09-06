@@ -109,7 +109,13 @@ public:
         name collection_name,
         int32_t template_id
     );
-
+    
+    ACTION redmaxtemplt(
+        name authorized_editor,
+        name collection_name,
+        int32_t template_id,
+        uint32_t new_max_supply
+    );
 
     ACTION mintasset(
         name authorized_minter,
