@@ -466,6 +466,35 @@ ACTION atomicassets::createtempl(
     ).send();
 }
 
+/**
+* Deletes a template if the issued supply is zero
+* @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+**/
+ACTION atomicassets::deltemplate(
+    name authorized_editor,
+    name collection_name,
+    int32_t template_id
+) {
+    require_auth(authorized_editor);
+
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    check_has_collection_auth(
+        authorized_editor,
+        collection_name,
+        "The editor is not authorized within the collection"
+    );
+
+    templates_t collection_templates = get_templates(collection_name);
+    auto template_itr = collection_templates.require_find(template_id,
+        "No template with the specified id exists for the specified collection");
+
+    check(template_itr->issued_supply == 0,
+        "Can't delete a template that has any assets issued");
+
+    collection_templates.erase(template_itr);
+}
 
 /**
 * Sets the max supply of the template to the issued supply
@@ -501,7 +530,6 @@ ACTION atomicassets::locktemplate(
         _template.max_supply = _template.issued_supply;
     });
 }
-
 
 /**
 *  Creates a new asset

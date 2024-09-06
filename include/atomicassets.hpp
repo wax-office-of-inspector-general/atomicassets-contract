@@ -104,12 +104,17 @@ public:
         ATTRIBUTE_MAP immutable_data
     );
 
+    ACTION deltemplate(
+        name authorized_editor,
+        name collection_name,
+        int32_t template_id
+    );
+    
     ACTION locktemplate(
         name authorized_editor,
         name collection_name,
         int32_t template_id
     );
-
 
     ACTION mintasset(
         name authorized_minter,
