@@ -666,6 +666,84 @@ ACTION atomicassets::setassetdata(
     });
 }
 
+/**
+*  Updates the mutable data of a template within the templatedata table
+*  If the row doesn't exist within the template, it emplaces a new row
+*  If the new_mutable_data is empty & the row exists, it eraes the row
+*  @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+                  specified in the related template
+*/
+
+
+ACTION atomicassets::settempldata(
+    name authorized_editor,
+    name collection_name,
+    name schema_name,
+    int32_t template_id,
+    ATTRIBUTE_MAP new_mutable_data
+) {
+
+    require_auth(authorized_editor);
+
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    check_has_collection_auth(
+        authorized_editor,
+        collection_name,
+        "The editor is not authorized within the collection"
+    );
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(schema_name.value,
+        "No schema with this name exists");
+
+    templates_t collection_templates = get_templates(collection_name);
+    auto template_itr = collection_templates.require_find(template_id,
+        "No template with the specified id exists for the specified collection");
+
+    check_name_length(new_mutable_data);
+
+    template_data_t template_data = get_template_data(collection_name);
+    auto template_data_itr = template_data.find(template_id);
+
+    ATTRIBUTE_MAP deserialized_old_data;
+    
+    if (template_data_itr != template_data.end()){
+        deserialized_old_data = deserialize(
+            template_data_itr->mutable_serialized_data,
+            schema_itr->format
+        );
+    }
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logsetdatatl"),
+        make_tuple(collection_name, schema_name, template_id, deserialized_old_data, new_mutable_data)
+    ).send();
+
+    // If entry doesn't exist, then emplace entry
+    if (template_data_itr == template_data.end()){
+        template_data.emplace(authorized_editor, [&](auto &_template_data) {
+            _template_data.template_id = template_id;
+            _template_data.mutable_serialized_data = serialize(new_mutable_data, schema_itr->format);
+        });
+    }
+
+    // If entry exists && new_mutable_data is not empty, then modify entry
+    if (template_data_itr != template_data.end() && new_mutable_data.size() > 0){
+        template_data.modify(template_data_itr, authorized_editor, [&](auto &_template_data) {
+            _template_data.mutable_serialized_data = serialize(new_mutable_data, schema_itr->format);
+        });
+    }
+
+    // If entry exists && new_mutable_data is empty, then erase entry
+    if (template_data_itr != template_data.end() && new_mutable_data.size() == 0){
+        template_data.erase(template_data_itr);
+    }
+
+}
 
 /**
 * This action is used to add a zero value asset to the quantities vector of owner in the balances table
@@ -1187,6 +1265,17 @@ ACTION atomicassets::logsetdata(
     notify_collection_accounts(asset_itr->collection_name);
 }
 
+ACTION atomicassets::logsetdatatl(
+    name collection_name,
+    name schema_name,
+    int32_t template_id, 
+    ATTRIBUTE_MAP old_data,
+    ATTRIBUTE_MAP new_data
+) {
+    require_auth(get_self());
+
+    notify_collection_accounts(collection_name);
+}
 
 ACTION atomicassets::logbackasset(
     name asset_owner,
@@ -1482,4 +1571,8 @@ atomicassets::schemas_t atomicassets::get_schemas(name collection_name) {
 
 atomicassets::templates_t atomicassets::get_templates(name collection_name) {
     return templates_t(get_self(), collection_name.value);
+}
+
+atomicassets::template_data_t atomicassets::get_template_data(name collection_name) {
+    return template_data_t(get_self(), collection_name.value);
 }
