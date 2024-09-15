@@ -530,9 +530,6 @@ ACTION atomicassets::redmaxtemplt(
     auto template_itr = collection_templates.require_find(template_id,
         "No template with the specified id exists for the specified collection");
 
-    check(template_itr->issued_supply != 0,
-        "Can't lock a template that does not have at least one issued asset");
-
     check(new_max_supply > 0, "Can't set the max supply of a template to 0");
 
     check(template_itr->max_supply > new_max_supply,"Can't increase the max supply of a template");
