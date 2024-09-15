@@ -409,6 +409,7 @@ ACTION atomicassets::extendschema(
 *  Creates a new template
 *  @required_auth authorized_creator, who is within the authorized_accounts list of the collection
 */
+
 ACTION atomicassets::createtempl(
     name authorized_creator,
     name collection_name,
@@ -417,55 +418,27 @@ ACTION atomicassets::createtempl(
     bool burnable,
     uint32_t max_supply,
     ATTRIBUTE_MAP immutable_data
-) {
-    require_auth(authorized_creator);
-
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
-
-    check_has_collection_auth(
-        authorized_creator,
-        collection_name,
-        "The creator is not authorized within the collection"
-    );
-
-    schemas_t collection_schemas = get_schemas(collection_name);
-    auto schema_itr = collection_schemas.require_find(schema_name.value,
-        "No schema with this name exists");
-
-    config_s current_config = config.get();
-    int32_t template_id = current_config.template_counter++;
-    config.set(current_config, get_self());
-
-    templates_t collection_templates = get_templates(collection_name);
-
-    collection_templates.emplace(authorized_creator, [&](auto &_template) {
-        _template.template_id = template_id;
-        _template.schema_name = schema_name;
-        _template.transferable = transferable;
-        _template.burnable = burnable;
-        _template.max_supply = max_supply;
-        _template.issued_supply = 0;
-        _template.immutable_serialized_data = serialize(immutable_data, schema_itr->format);
-    });
-
-    action(
-        permission_level{get_self(), name("active")},
-        get_self(),
-        name("lognewtempl"),
-        make_tuple(
-            template_id,
-            authorized_creator,
-            collection_name,
-            schema_name,
-            transferable,
-            burnable,
-            max_supply,
-            immutable_data
-        )
-    ).send();
+) {  
+    create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, {});
 }
 
+/**
+*  Creates a new template with explicit mutable data fields
+*  @required_auth authorized_creator, who is within the authorized_accounts list of the collection
+*/
+
+ACTION atomicassets::createtempl2(
+    name authorized_creator,
+    name collection_name,
+    name schema_name,
+    bool transferable,
+    bool burnable,
+    uint32_t max_supply,
+    ATTRIBUTE_MAP immutable_data,
+    ATTRIBUTE_MAP mutable_data
+) {  
+    create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, mutable_data);
+}
 
 /**
 * Sets the max supply of the template to the issued supply
@@ -727,6 +700,7 @@ ACTION atomicassets::settempldata(
     if (template_data_itr == template_data.end()){
         template_data.emplace(authorized_editor, [&](auto &_template_data) {
             _template_data.template_id = template_id;
+            _template_data.schema_name = schema_name;
             _template_data.mutable_serialized_data = serialize(new_mutable_data, schema_itr->format);
         });
     }
@@ -1307,6 +1281,90 @@ ACTION atomicassets::logburnasset(
     require_auth(get_self());
 
     notify_collection_accounts(collection_name);
+}
+
+
+/**
+* Function for creating a template, handling both the creation of normal templates & purely mutable templates
+*/
+
+void atomicassets::create_template(
+    name & authorized_creator,
+    name & collection_name,
+    name & schema_name,
+    bool transferable,
+    bool burnable,
+    uint32_t max_supply,
+    ATTRIBUTE_MAP immutable_data,
+    ATTRIBUTE_MAP mutable_data
+) { 
+    require_auth(authorized_creator);
+
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    check_has_collection_auth(
+        authorized_creator,
+        collection_name,
+        "The creator is not authorized within the collection"
+    );
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(schema_name.value,
+        "No schema with this name exists");
+
+    config_s current_config = config.get();
+    int32_t template_id = current_config.template_counter++;
+    config.set(current_config, get_self());
+
+    templates_t collection_templates = get_templates(collection_name);
+
+    check_name_length(immutable_data);
+    collection_templates.emplace(authorized_creator, [&](auto &_template) {
+        _template.template_id = template_id;
+        _template.schema_name = schema_name;
+        _template.transferable = transferable;
+        _template.burnable = burnable;
+        _template.max_supply = max_supply;
+        _template.issued_supply = 0;
+        if (immutable_data.size() > 0){
+            _template.immutable_serialized_data = serialize(immutable_data, schema_itr->format);
+        }
+    });
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("lognewtempl"),
+        make_tuple(
+            template_id,
+            authorized_creator,
+            collection_name,
+            schema_name,
+            transferable,
+            burnable,
+            max_supply,
+            immutable_data
+        )
+    ).send();
+
+    if (mutable_data.size() > 0){
+        check_name_length(mutable_data);
+
+        template_data_t template_data = get_template_data(collection_name);
+        template_data.emplace(authorized_creator, [&](auto &_template_data) {
+            _template_data.template_id = template_id;
+            _template_data.mutable_serialized_data = serialize(mutable_data, schema_itr->format);
+        });
+
+        action(
+            permission_level{get_self(), name("active")},
+            get_self(),
+            name("logsetdatatl"),
+            make_tuple(collection_name, schema_name, template_id, mutable_data, mutable_data)
+        ).send();
+    }
+    
 }
 
 
