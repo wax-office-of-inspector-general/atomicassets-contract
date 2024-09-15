@@ -104,7 +104,7 @@ public:
         ATTRIBUTE_MAP immutable_data
     );
 
-    ACTION createtempl2(
+    ACTION createtempl(
         name authorized_creator,
         name collection_name,
         name schema_name,
@@ -413,8 +413,8 @@ private:
         bool transferable,
         bool burnable,
         uint32_t max_supply,
-        ATTRIBUTE_MAP immutable_data,
-        ATTRIBUTE_MAP mutable_data
+        ATTRIBUTE_MAP & immutable_data,
+        ATTRIBUTE_MAP mutable_data = {}
     );
 
     void internal_transfer(

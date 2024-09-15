@@ -419,7 +419,7 @@ ACTION atomicassets::createtempl(
     uint32_t max_supply,
     ATTRIBUTE_MAP immutable_data
 ) {  
-    create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, {});
+    create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data);
 }
 
 /**
@@ -427,7 +427,7 @@ ACTION atomicassets::createtempl(
 *  @required_auth authorized_creator, who is within the authorized_accounts list of the collection
 */
 
-ACTION atomicassets::createtempl2(
+ACTION atomicassets::createtempl(
     name authorized_creator,
     name collection_name,
     name schema_name,
@@ -439,6 +439,7 @@ ACTION atomicassets::createtempl2(
 ) {  
     create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, mutable_data);
 }
+
 
 /**
 * Sets the max supply of the template to the issued supply
@@ -1295,7 +1296,7 @@ void atomicassets::create_template(
     bool transferable,
     bool burnable,
     uint32_t max_supply,
-    ATTRIBUTE_MAP immutable_data,
+    ATTRIBUTE_MAP & immutable_data,
     ATTRIBUTE_MAP mutable_data
 ) { 
     require_auth(authorized_creator);
