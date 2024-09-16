@@ -440,8 +440,8 @@ ACTION atomicassets::setschematyp(
     auto & schema_format = schema_itr->format;
 
     for (auto a = 0; a < schema_format.size(); a++){
-        auto itr_f = schema_format.at(a);
-        auto itr_t = schema_format_type.at(a);
+        auto & itr_f = schema_format.at(a);
+        auto & itr_t = schema_format_type.at(a);
         check(itr_f.name == itr_t.name, 
             "Mismatch between schema format names");
     }
