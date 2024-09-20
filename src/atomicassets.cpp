@@ -1318,6 +1318,11 @@ void atomicassets::create_template(
     int32_t template_id = current_config.template_counter++;
     config.set(current_config, get_self());
 
+    if (transferable == false){
+        check(burnable == true, 
+            "A template cannot be both non-transferable and non-burnable");
+    }
+
     templates_t collection_templates = get_templates(collection_name);
 
     check_name_length(immutable_data);
