@@ -1360,6 +1360,7 @@ void atomicassets::create_template(
         template_data_t template_data = get_template_data(collection_name);
         template_data.emplace(authorized_creator, [&](auto &_template_data) {
             _template_data.template_id = template_id;
+            _template_data.schema_name = schema_name;
             _template_data.mutable_serialized_data = serialize(mutable_data, schema_itr->format);
         });
 
