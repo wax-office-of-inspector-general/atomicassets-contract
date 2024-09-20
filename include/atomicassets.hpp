@@ -233,12 +233,6 @@ public:
         ATTRIBUTE_MAP new_data
     );
 
-    ACTION logbackasset(
-        name asset_owner,
-        uint64_t asset_id,
-        asset backed_token
-    );
-
     ACTION logburnasset(
         name asset_owner,
         uint64_t asset_id,
@@ -377,13 +371,6 @@ private:
         vector <uint64_t> asset_ids,
         string memo,
         name scope_payer
-    );
-
-    void internal_back_asset(
-        name ram_payer,
-        name asset_owner,
-        uint64_t asset_id,
-        asset back_quantity
     );
 
     void internal_decrease_balance(
