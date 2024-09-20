@@ -427,7 +427,7 @@ ACTION atomicassets::createtempl(
 *  @required_auth authorized_creator, who is within the authorized_accounts list of the collection
 */
 
-ACTION atomicassets::createtempl(
+ACTION atomicassets::createtempl2(
     name authorized_creator,
     name collection_name,
     name schema_name,

@@ -104,7 +104,7 @@ public:
         ATTRIBUTE_MAP immutable_data
     );
 
-    ACTION createtempl(
+    ACTION createtempl2(
         name authorized_creator,
         name collection_name,
         name schema_name,
