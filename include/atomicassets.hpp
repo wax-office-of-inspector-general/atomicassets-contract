@@ -11,7 +11,7 @@ using namespace atomicdata;
 
 
 static constexpr double MAX_MARKET_FEE = 0.15;
-
+static const string MISSING_COLLECTION_AUTH = "Missing authorization for this collection";
 
 CONTRACT atomicassets : public contract {
 public:
@@ -352,25 +352,27 @@ private:
         vector <extended_symbol> supported_tokens  = {};
     };
     typedef singleton <name("config"), config_s>               config_t;
-    // https://github.com/EOSIO/eosio.cdt/issues/280
-    typedef multi_index <name("config"), config_s>             config_t_for_abi;
+
 
     TABLE tokenconfigs_s {
         name        standard = name("atomicassets");
         std::string version  = string("1.3.1");
     };
     typedef singleton <name("tokenconfigs"), tokenconfigs_s>   tokenconfigs_t;
-    // https://github.com/EOSIO/eosio.cdt/issues/280
-    typedef multi_index <name("tokenconfigs"), tokenconfigs_s> tokenconfigs_t_for_abi;
 
+    // Table Fetches
+    collections_t  get_collections() {return collections_t(get_self(), get_self().value);}
+    collections_t  get_collections_data() {return collections_t(get_self(), name("coldata").value);}
+    offers_t       get_offers() {return offers_t(get_self(), get_self().value);}
+    balances_t     get_balances() {return balances_t(get_self(), get_self().value);}
+    config_t       get_config() {return config_t(get_self(), get_self().value);}
+    tokenconfigs_t get_tokenconfigs() {return tokenconfigs_t(get_self(), get_self().value);}
 
-    collections_t  collections  = collections_t(get_self(), get_self().value);
-    offers_t       offers       = offers_t(get_self(), get_self().value);
-    balances_t     balances     = balances_t(get_self(), get_self().value);
-    config_t       config       = config_t(get_self(), get_self().value);
-    tokenconfigs_t tokenconfigs = tokenconfigs_t(get_self(), get_self().value);
+    assets_t       get_assets(name acc) {return assets_t(get_self(), acc.value);}
+    schemas_t      get_schemas(name collection_name) {return schemas_t(get_self(), collection_name.value);}
+    templates_t    get_templates(name collection_name) {return templates_t(get_self(), collection_name.value);}
 
-
+    // Internal Functions
     void internal_transfer(
         name from,
         name to,
@@ -396,16 +398,12 @@ private:
     );
 
     void check_has_collection_auth(
-        name account_to_check,
-        name collection_name,
-        string error_message
+        name & account_to_check,
+        const collections_s & collection_itr
     );
 
-    void check_name_length(ATTRIBUTE_MAP data);
+    void check_name_length(ATTRIBUTE_MAP & data);
 
-    assets_t get_assets(name acc);
+    void coldata_cleanup(name & collection_name, const collections_s & collection_itr);
 
-    schemas_t get_schemas(name collection_name);
-
-    templates_t get_templates(name collection_name);
 };
