@@ -1,6 +1,5 @@
 #include <atomicassets.hpp>
 
-
 /**
 *  Initializes the config table. Only needs to be called once when first deploying the contract
 *  @required_auth The contract itself
@@ -81,6 +80,77 @@ ACTION atomicassets::transfer(
     internal_transfer(from, to, asset_ids, memo, from);
 }
 
+/**
+*  Moves one or more assets to another account
+*  @required_auth of the true owner of the asset
+*  Cannot have notifications for the from & to, exploitable
+*/
+ACTION atomicassets::move(
+    name owner,
+    name from,
+    name to,
+    vector <uint64_t> asset_ids,
+    string memo
+) {
+    require_auth(owner);
+    require_recipient(owner);
+
+    check(is_account(from), "from account does not exist");
+    check(is_account(to), "to account does not exist");
+
+    check(from != to, "from & to fields cannot be the same");
+    
+    check(asset_ids.size() != 0, "asset_ids needs to contain at least one id");
+    check(memo.length() <= 256, "A move memo can only be 256 characters max");
+
+    vector <uint64_t> asset_ids_copy = asset_ids;
+    std::sort(asset_ids_copy.begin(), asset_ids_copy.end());
+    check(std::adjacent_find(asset_ids_copy.begin(), asset_ids_copy.end()) == asset_ids_copy.end(),
+        "Can't move the same asset multiple times");
+
+    assets_t owner_assets = get_assets(owner);
+
+    for (uint64_t & asset_id : asset_ids) {
+        auto asset_itr = owner_assets.require_find(asset_id,
+            ("Owner doesn't own at least one of the provided assets (ID: " +
+             to_string(asset_id) + ")").c_str());
+
+        //Existence doesn't have to be checked because this always has to exist
+        if (asset_itr->template_id >= 0) {
+            templates_t collection_templates = get_templates(asset_itr->collection_name);
+
+            auto template_itr = collection_templates.find(asset_itr->template_id);
+            check(template_itr->transferable,
+                ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+        }
+
+        auto holders_itr = holders.find(asset_id);
+        if (holders_itr == holders.end()){
+            check(from == owner, 
+                ("Only the owner can move this asset (ID: " + to_string(asset_id) + ")").c_str());
+            // Emplaces new holder
+            holders.emplace(owner, [&](auto &_holders_row){
+                _holders_row.asset_id = asset_id;
+                _holders_row.holder = to;
+                _holders_row.owner = owner;
+            });
+        }
+
+        if (holders_itr != holders.end()){
+            check(holders_itr->holder == from, 
+                ("At least one asset invalidates the 'from:holder' constraint (ID: " + to_string(asset_id) + ")").c_str());
+            
+            // Deletes row if returning to owner
+            if (to == owner){
+                holders.erase(holders_itr);
+            } else { // Modifies row to move holdership to the new "to" wallet
+                holders.modify(holders_itr, owner, [&](auto &_holders_row){
+                    _holders_row.holder = to;
+                });
+            }
+        }
+    }
+}
 
 /**
 *  Creates a new collection
@@ -1266,6 +1336,19 @@ void atomicassets::internal_transfer(
             auto template_itr = collection_templates.find(asset_itr->template_id);
             check(template_itr->transferable,
                 ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+        }
+
+        auto holders_itr = holders.find(asset_id);
+        if (holders_itr != holders.end()){
+
+            // Deletes row if transfering to holder
+            if (to == holders_itr->holder){
+                holders.erase(holders_itr);
+            } else { // Modifies row to move ownership to the new "to" wallet
+                holders.modify(holders_itr, from, [&](auto &_holders_row){
+                    _holders_row.owner = to;
+                });
+            }
         }
 
         //This is needed for sending notifications later

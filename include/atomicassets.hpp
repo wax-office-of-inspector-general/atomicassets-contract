@@ -33,6 +33,13 @@ public:
         string memo
     );
 
+    ACTION move(
+        name owner,
+        name from,
+        name to,
+        vector <uint64_t> asset_ids,
+        string memo
+    );
 
     ACTION createcol(
         name author,
@@ -269,6 +276,19 @@ private:
     typedef multi_index <name("collections"), collections_s> collections_t;
 
 
+    TABLE holders_s {
+        uint64_t         asset_id;
+        name             holder;
+        name             owner;
+
+        uint64_t primary_key() const { return asset_id; };
+        uint64_t by_holder() const { return holder.value; };
+    };
+
+    typedef multi_index <name("holders"), holders_s,  
+        indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
+    holders_t;
+
     //Scope: collection_name
     TABLE schemas_s {
         name            schema_name;
@@ -311,7 +331,6 @@ private:
     };
 
     typedef multi_index <name("assets"), assets_s> assets_t;
-
 
     TABLE offers_s {
         uint64_t          offer_id;
@@ -365,6 +384,7 @@ private:
 
 
     collections_t  collections  = collections_t(get_self(), get_self().value);
+    holders_t      holders      = holders_t(get_self(), get_self().value);
     offers_t       offers       = offers_t(get_self(), get_self().value);
     balances_t     balances     = balances_t(get_self(), get_self().value);
     config_t       config       = config_t(get_self(), get_self().value);
