@@ -1338,6 +1338,19 @@ void atomicassets::internal_transfer(
                 ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
         }
 
+        auto holders_itr = holders.find(asset_id);
+        if (holders_itr != holders.end()){
+
+            // Deletes row if transfering to holder
+            if (to == holders_itr->holder){
+                holders.erase(holders_itr);
+            } else { // Modifies row to move ownership to the new "to" wallet
+                holders.modify(holders_itr, from, [&](auto &_holders_row){
+                    _holders_row.owner = to;
+                });
+            }
+        }
+
         //This is needed for sending notifications later
         if (collection_to_assets_transferred.find(asset_itr->collection_name) !=
             collection_to_assets_transferred.end()) {
