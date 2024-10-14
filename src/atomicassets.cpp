@@ -405,10 +405,11 @@ ACTION atomicassets::extendschema(
 }
 
 /**
-*  Creates a new schema
-*  schemas can only be extended in the future, but never changed retroactively.
-*  This guarantees a correct deserialization for existing templates and assets.
-*  @required_auth authorized_creator, who is within the authorized_accounts list of the collection
+*  Emplaces or modifies a schematype for a schema
+*  Can be used as a descriptor of a schema attribute (i.e. "Rarity"::"Provides X bonuses to this NFT")
+*  Can also be used as a media type for a schema attribute (i.e. denoting an IPFS hash with a particular file type, like .obj or .gltf for 3D files)
+*  Must match the formating of the schema
+*  @required_auth authorized_editor, who is within the authorized_accounts list of the collection
 */
 ACTION atomicassets::setschematyp(
     name authorized_creator,
@@ -433,17 +434,23 @@ ACTION atomicassets::setschematyp(
 
     schema_types_t collection_schema_types = get_schema_types(collection_name);
     auto schema_types_itr = collection_schema_types.find(schema_name.value);
-
-    check(schema_itr->format.size() == schema_format_type.size(), 
-        "Schema Types must be equal in length / size to the original format of the Schema");
-    
+  
     auto & schema_format = schema_itr->format;
 
-    for (auto a = 0; a < schema_format.size(); a++){
-        auto & itr_f = schema_format.at(a);
-        auto & itr_t = schema_format_type.at(a);
-        check(itr_f.name == itr_t.name, 
-            "Mismatch between schema format names");
+    // Check to see if all elements in schema_format_type have unique names && exist within the schema_format
+    std::set<std::string> format_type_set;
+    for (FORMAT_TYPE & format_type_itr : schema_format_type){
+        check(format_type_set.find(format_type_itr.name) == format_type_set.end(), 
+            "Schema format type cannot contain duplicate entries");
+
+        check(std::find_if(
+                schema_format.begin(), schema_format.end(), 
+                    [&format_type_itr](auto & format_itr) 
+                        { return format_type_itr.name == format_itr.name; })
+            != schema_format.end(), 
+                ("No attribute in the Schema format matches the Schema format type of '" + format_type_itr.name + "'").c_str());
+
+        format_type_set.insert(format_type_itr.name);
     }
 
     if (schema_types_itr == collection_schema_types.end()){
