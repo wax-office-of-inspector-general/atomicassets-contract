@@ -104,6 +104,17 @@ public:
         ATTRIBUTE_MAP immutable_data
     );
 
+    ACTION createtempl2(
+        name authorized_creator,
+        name collection_name,
+        name schema_name,
+        bool transferable,
+        bool burnable,
+        uint32_t max_supply,
+        ATTRIBUTE_MAP immutable_data,
+        ATTRIBUTE_MAP mutable_data
+    );
+
     ACTION locktemplate(
         name authorized_editor,
         name collection_name,
@@ -129,6 +140,12 @@ public:
         ATTRIBUTE_MAP new_mutable_data
     );
 
+    ACTION settempldata(
+        name authorized_editor,
+        name collection_name,
+        int32_t template_id,
+        ATTRIBUTE_MAP new_mutable_data
+    );
 
     ACTION announcedepo(
         name owner,
@@ -233,6 +250,14 @@ public:
         ATTRIBUTE_MAP new_data
     );
 
+    ACTION logsetdatatl(
+        name collection_name,
+        name schema_name,
+        int32_t template_id, 
+        ATTRIBUTE_MAP old_data,
+        ATTRIBUTE_MAP new_data
+    );
+
     ACTION logbackasset(
         name asset_owner,
         uint64_t asset_id,
@@ -295,6 +320,16 @@ private:
 
     typedef multi_index <name("templates"), templates_s> templates_t;
 
+    //Scope: collection_name
+    TABLE template_data_s {
+        int32_t          template_id;
+        name             schema_name;
+        vector <uint8_t> mutable_serialized_data;
+
+        uint64_t primary_key() const { return (uint64_t) template_id; }
+    };
+
+    typedef multi_index <name("templatedata"), template_data_s> template_data_t;
 
     //Scope: owner
     TABLE assets_s {
@@ -370,6 +405,16 @@ private:
     config_t       config       = config_t(get_self(), get_self().value);
     tokenconfigs_t tokenconfigs = tokenconfigs_t(get_self(), get_self().value);
 
+    void internal_create_template(
+        name authorized_creator,
+        name collection_name,
+        name schema_name,
+        bool transferable,
+        bool burnable,
+        uint32_t max_supply,
+        ATTRIBUTE_MAP & immutable_data,
+        ATTRIBUTE_MAP mutable_data = {}
+    );
 
     void internal_transfer(
         name from,
@@ -408,4 +453,6 @@ private:
     schemas_t get_schemas(name collection_name);
 
     templates_t get_templates(name collection_name);
+    
+    template_data_t get_template_data(name collection_name);
 };
