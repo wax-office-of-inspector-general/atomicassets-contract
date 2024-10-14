@@ -602,17 +602,8 @@ ACTION atomicassets::mintasset(
         )
     ).send();
 
-    //Calls the internal_back_asset function which handles asset backing.
-    //It will throw if authorized_minter does not have a sufficient balance to pay for the backed tokens
-    //Token validity must not be cross-checked with config.supported_tokens because it's implicitly checked
-    //when decreasing minter's balance (only supported tokens can be deposited)
-    set <symbol> used_symbols = {};
-    for (asset &token : tokens_to_back) {
-        check(used_symbols.find(token.symbol) == used_symbols.end(),
-            "Symbols in the tokens_to_back must be unique");
-        used_symbols.emplace(token.symbol);
-        internal_back_asset(authorized_minter, new_asset_owner, asset_id, token);
-    }
+    check(tokens_to_back.size() == 0, 
+        "Native backing has been deprecated on the AtomicAssets Contract");
 }
 
 
@@ -770,9 +761,8 @@ ACTION atomicassets::backasset(
     uint64_t asset_id,
     asset token_to_back
 ) {
-    require_auth(payer);
-
-    internal_back_asset(payer, asset_owner, asset_id, token_to_back);
+    check(false, 
+        "Native backing has been deprecated on the AtomicAssets Contract");
 }
 
 
@@ -1187,22 +1177,13 @@ ACTION atomicassets::logsetdata(
     notify_collection_accounts(asset_itr->collection_name);
 }
 
-
 ACTION atomicassets::logbackasset(
     name asset_owner,
     uint64_t asset_id,
     asset backed_token
 ) {
     require_auth(get_self());
-
-    require_recipient(asset_owner);
-
-    assets_t owner_assets = get_assets(asset_owner);
-    auto asset_itr = owner_assets.find(asset_id);
-
-    notify_collection_accounts(asset_itr->collection_name);
 }
-
 
 ACTION atomicassets::logburnasset(
     name asset_owner,
@@ -1322,60 +1303,6 @@ void atomicassets::internal_transfer(
         ).send();
     }
 }
-
-
-/**
-*  The specified asset is backed by the specified quantitiy.
-*  This is done in an internal function because it is needed both in the mintasset and the backasset action
-*/
-void atomicassets::internal_back_asset(
-    name payer,
-    name asset_owner,
-    uint64_t asset_id,
-    asset token_to_back
-) {
-    check(token_to_back.amount > 0, "token_to_back must be positive");
-
-    //The internal_decrease_balance function will throw if payer does not have a sufficient balance
-    internal_decrease_balance(payer, token_to_back);
-
-    assets_t owner_assets = get_assets(asset_owner);
-    auto asset_itr = owner_assets.require_find(asset_id,
-        "The specified owner does not own the asset with the specified ID");
-
-    if (asset_itr->template_id != -1) {
-        templates_t collection_templates = get_templates(asset_itr->collection_name);
-
-        auto template_itr = collection_templates.find(asset_itr->template_id);
-        check(template_itr->burnable, "The asset is not burnable. Only burnable assets can be backed.");
-    }
-
-    vector <asset> backed_tokens = asset_itr->backed_tokens;
-    bool found_backed_token = false;
-    for (asset &token : backed_tokens) {
-        if (token.symbol == token_to_back.symbol) {
-            found_backed_token = true;
-            token.amount += token_to_back.amount;
-            break;
-        }
-    }
-    if (!found_backed_token) {
-        backed_tokens.push_back(token_to_back);
-    }
-
-    owner_assets.modify(asset_itr, payer, [&](auto &_asset) {
-        _asset.ram_payer = payer;
-        _asset.backed_tokens = backed_tokens;
-    });
-
-    action(
-        permission_level{get_self(), name("active")},
-        get_self(),
-        name("logbackasset"),
-        make_tuple(asset_owner, asset_id, token_to_back)
-    ).send();
-}
-
 
 /**
 *  Decreases the balance of a specified account by a specified quantity
