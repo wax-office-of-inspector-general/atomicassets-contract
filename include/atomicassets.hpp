@@ -11,7 +11,7 @@ using namespace atomicdata;
 
 
 static constexpr double MAX_MARKET_FEE = 0.15;
-static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 604800; // 1 week, valid for 3 weeks
+static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
 
 
 CONTRACT atomicassets : public contract {
@@ -82,7 +82,7 @@ public:
     ACTION createauswap(
         name collection_name,
         name new_author,
-        name permission
+        bool owner
     );
     
     ACTION acceptauswap(
@@ -272,8 +272,7 @@ private:
         name             collection_name;
         name             current_author;
         name             new_author;
-        name             permission;
-        uint32_t         swap_date;
+        uint32_t         acceptance_date;
 
         uint64_t primary_key() const { return collection_name.value; };
     };

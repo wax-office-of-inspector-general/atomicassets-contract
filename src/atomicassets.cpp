@@ -335,17 +335,15 @@ ACTION atomicassets::forbidnotify(
 ACTION atomicassets::createauswap(
     name collection_name,
     name new_author,
-    name permission
+    bool owner
 ) {
     auto collection_itr = collections.require_find(collection_name.value,
         "No collection with this name exists");
 
-    if (permission == name("owner")){
+    if (owner){
         require_auth(permission_level{collection_itr->author, name("owner")});
     } else {
-        check(permission == name("active"), 
-            "Only 'owner' or 'active' permissions can create an author swap");
-        require_auth(permission_level{collection_itr->author, name("active")});
+        require_auth(collection_itr->author);
     }
 
     check(authorswaps.find(collection_name.value) == authorswaps.end(), 
@@ -355,8 +353,7 @@ ACTION atomicassets::createauswap(
         _author_swaps.collection_name = collection_name;
         _author_swaps.current_author = collection_itr->author;
         _author_swaps.new_author = new_author;
-        _author_swaps.permission = permission;
-        _author_swaps.swap_date = eosio::current_time_point().sec_since_epoch();
+        _author_swaps.acceptance_date = eosio::current_time_point().sec_since_epoch() + (owner ? 0 : AUTHOR_SWAP_TIME_DELTA);
     });
 }
 
@@ -379,19 +376,14 @@ ACTION atomicassets::acceptauswap(
     check(collection_itr->author == author_swaps_itr->current_author, 
         "Current author mismatch");
 
+    require_auth(author_swaps_itr->new_author);
+
     uint32_t now = eosio::current_time_point().sec_since_epoch();
+       
+    check (now > author_swaps_itr->acceptance_date, 
+        ("[ " + to_string(author_swaps_itr->acceptance_date - now) + " ] seconds remaining until this author swap can be accepted").c_str());
 
-    if (author_swaps_itr->permission == name("owner")){
-        require_auth(permission_level{author_swaps_itr->new_author, name("owner")});
-    } else {    
-        check (author_swaps_itr->swap_date + AUTHOR_SWAP_TIME_DELTA < now, 
-            ("Active permission can only accept an author swap after " + to_string(AUTHOR_SWAP_TIME_DELTA) + " seconds have passed. [ " +
-            to_string(now - author_swaps_itr->swap_date + AUTHOR_SWAP_TIME_DELTA) + " ] seconds remaining").c_str());
-
-        require_auth(permission_level{collection_itr->author, name("active")});
-    }
-
-    check (now < author_swaps_itr->swap_date + (AUTHOR_SWAP_TIME_DELTA * 3), "Author swap for this collection has expired");
+    check (now < author_swaps_itr->acceptance_date + AUTHOR_SWAP_TIME_DELTA, "Author swap for this collection has expired");
 
     collections.modify(collection_itr, author_swaps_itr->new_author, [&](auto &_collection){
         _collection.author = author_swaps_itr->new_author;
