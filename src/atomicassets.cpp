@@ -1177,6 +1177,13 @@ ACTION atomicassets::logsetdata(
     notify_collection_accounts(asset_itr->collection_name);
 }
 
+ACTION atomicassets::logbackasset(
+    name asset_owner,
+    uint64_t asset_id,
+    asset backed_token
+) {
+    require_auth(get_self());
+}
 
 ACTION atomicassets::logburnasset(
     name asset_owner,

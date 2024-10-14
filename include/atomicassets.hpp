@@ -233,6 +233,12 @@ public:
         ATTRIBUTE_MAP new_data
     );
 
+    ACTION logbackasset(
+        name asset_owner,
+        uint64_t asset_id,
+        asset backed_token
+    );
+    
     ACTION logburnasset(
         name asset_owner,
         uint64_t asset_id,
