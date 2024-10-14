@@ -110,7 +110,7 @@ public:
         int32_t template_id
     );
     
-    ACTION redmaxtemplt(
+    ACTION redtemplmax(
         name authorized_editor,
         name collection_name,
         int32_t template_id,

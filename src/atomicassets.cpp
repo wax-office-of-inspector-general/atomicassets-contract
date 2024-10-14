@@ -509,7 +509,7 @@ ACTION atomicassets::locktemplate(
 * @required_auth authorized_editor, who is within the authorized_accounts list of the collection
 **/
 
-ACTION atomicassets::redmaxtemplt(
+ACTION atomicassets::redtemplmax(
     name authorized_editor,
     name collection_name,
     int32_t template_id,
@@ -530,9 +530,14 @@ ACTION atomicassets::redmaxtemplt(
     auto template_itr = collection_templates.require_find(template_id,
         "No template with the specified id exists for the specified collection");
 
-    check(new_max_supply > 0, "Can't set the max supply of a template to 0");
+    check(new_max_supply > 0, 
+        "The new max supply can't be set to zero (infinite)");
 
-    check(template_itr->max_supply > new_max_supply,"Can't increase the max supply of a template");
+    check(template_itr->issued_supply <= new_max_supply, 
+        "The new max supply can't be lower than the issued supply");
+
+    check(template_itr->max_supply == 0 || template_itr->max_supply > new_max_supply, 
+        "The new max supply must be lower than the existing max supply");
 
     collection_templates.modify(template_itr, same_payer, [&](auto &_template) {
         _template.max_supply = new_max_supply;
