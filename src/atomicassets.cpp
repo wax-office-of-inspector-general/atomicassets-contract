@@ -327,6 +327,94 @@ ACTION atomicassets::forbidnotify(
     });
 }
 
+/**
+* Creates a swap offer for a collection
+* Acceptance functionality depends on the authorization being 'owner' or 'active' (7 days gate)
+*/
+
+ACTION atomicassets::createauswap(
+    name collection_name,
+    name new_author,
+    bool owner
+) {
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    if (owner){
+        require_auth(permission_level{collection_itr->author, name("owner")});
+    } else {
+        require_auth(collection_itr->author);
+    }
+
+    check(authorswaps.find(collection_name.value) == authorswaps.end(), 
+        "Can't swap author's while an authorswap is underway for this collection");
+    
+    authorswaps.emplace(collection_itr->author, [&](auto &_author_swaps) {
+        _author_swaps.collection_name = collection_name;
+        _author_swaps.current_author = collection_itr->author;
+        _author_swaps.new_author = new_author;
+        _author_swaps.acceptance_date = eosio::current_time_point().sec_since_epoch() + (owner ? 0 : AUTHOR_SWAP_TIME_DELTA);
+    });
+}
+
+/**
+* Accepts an author swap, with time constraints based on 'owner' or 'active' permissions used when creating the author swap
+* With default parameters, author swaps created by 'active' permissions can only be accepted after 1 week has passed
+* With default parameters, author swaps remain valid for up to 3 weeks
+*/
+
+ACTION atomicassets::acceptauswap(
+    name collection_name
+) {
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    auto author_swaps_itr = authorswaps.require_find(collection_name.value,
+        "No author swaps for this collection found");
+
+    // Just in case**
+    check(collection_itr->author == author_swaps_itr->current_author, 
+        "Current author mismatch");
+
+    require_auth(author_swaps_itr->new_author);
+
+    uint32_t now = eosio::current_time_point().sec_since_epoch();
+       
+    check (now > author_swaps_itr->acceptance_date, 
+        ("[ " + to_string(author_swaps_itr->acceptance_date - now) + " ] seconds remaining until this author swap can be accepted").c_str());
+
+    check (now < author_swaps_itr->acceptance_date + AUTHOR_SWAP_TIME_DELTA, "Author swap for this collection has expired");
+
+    collections.modify(collection_itr, author_swaps_itr->new_author, [&](auto &_collection){
+        _collection.author = author_swaps_itr->new_author;
+    });
+
+    authorswaps.erase(author_swaps_itr);
+}
+
+/**
+* Rejects author swaps
+* Can be used by either the current author or by the new author
+*/
+
+ACTION atomicassets::rejectauswap(
+    name collection_name
+) {
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    auto author_swaps_itr = authorswaps.require_find(collection_name.value,
+        "No author swaps for this collection found");
+    
+    // Just in case**
+    check(collection_itr->author == author_swaps_itr->current_author, 
+        "Current author mismatch");
+
+    check(has_auth(author_swaps_itr->current_author) || has_auth(author_swaps_itr->new_author), 
+        "Missing required authorizations");
+    
+    authorswaps.erase(author_swaps_itr);
+}
 
 /**
 *  Creates a new schema

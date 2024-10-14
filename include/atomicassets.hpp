@@ -11,6 +11,7 @@ using namespace atomicdata;
 
 
 static constexpr double MAX_MARKET_FEE = 0.15;
+static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
 
 
 CONTRACT atomicassets : public contract {
@@ -78,6 +79,19 @@ public:
         name collection_name
     );
 
+    ACTION createauswap(
+        name collection_name,
+        name new_author,
+        bool owner
+    );
+    
+    ACTION acceptauswap(
+        name collection_name
+    );
+
+    ACTION rejectauswap(
+        name collection_name
+    );
 
     ACTION createschema(
         name authorized_creator,
@@ -254,6 +268,17 @@ public:
 
 private:
 
+    TABLE author_swaps_s {
+        name             collection_name;
+        name             current_author;
+        name             new_author;
+        uint32_t         acceptance_date;
+
+        uint64_t primary_key() const { return collection_name.value; };
+    };
+
+    typedef multi_index <name("authorswaps"), author_swaps_s> author_swaps_t;
+
     TABLE collections_s {
         name             collection_name;
         name             author;
@@ -363,7 +388,7 @@ private:
     // https://github.com/EOSIO/eosio.cdt/issues/280
     typedef multi_index <name("tokenconfigs"), tokenconfigs_s> tokenconfigs_t_for_abi;
 
-
+    author_swaps_t authorswaps  = author_swaps_t(get_self(), get_self().value);
     collections_t  collections  = collections_t(get_self(), get_self().value);
     offers_t       offers       = offers_t(get_self(), get_self().value);
     balances_t     balances     = balances_t(get_self(), get_self().value);
