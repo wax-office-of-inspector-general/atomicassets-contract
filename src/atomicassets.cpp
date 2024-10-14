@@ -404,6 +404,66 @@ ACTION atomicassets::extendschema(
     });
 }
 
+/**
+*  Emplaces or modifies a schematype for a schema
+*  Can be used as a descriptor of a schema attribute (i.e. "Rarity"::"Provides X bonuses to this NFT")
+*  Can also be used as a media type for a schema attribute (i.e. denoting an IPFS hash with a particular file type, like .obj or .gltf for 3D files)
+*  Must match the formating of the schema
+*  @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+*/
+ACTION atomicassets::setschematyp(
+    name authorized_creator,
+    name collection_name,
+    name schema_name,
+    vector <FORMAT_TYPE> schema_format_type
+) {
+    require_auth(authorized_creator);
+
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    check_has_collection_auth(
+        authorized_creator,
+        collection_name,
+        "The creator is not authorized within the collection"
+    );
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(schema_name.value,
+        "Schema name not found within the collection");
+
+    schema_types_t collection_schema_types = get_schema_types(collection_name);
+    auto schema_types_itr = collection_schema_types.find(schema_name.value);
+  
+    auto & schema_format = schema_itr->format;
+
+    // Check to see if all elements in schema_format_type have unique names && exist within the schema_format
+    std::set<std::string> format_type_set;
+    for (FORMAT_TYPE & format_type_itr : schema_format_type){
+        check(format_type_set.find(format_type_itr.name) == format_type_set.end(), 
+            "Schema format type cannot contain duplicate entries");
+
+        check(std::find_if(
+                schema_format.begin(), schema_format.end(), 
+                    [&format_type_itr](auto & format_itr) 
+                        { return format_type_itr.name == format_itr.name; })
+            != schema_format.end(), 
+                ("No attribute in the Schema format matches the Schema format type of '" + format_type_itr.name + "'").c_str());
+
+        format_type_set.insert(format_type_itr.name);
+    }
+
+    if (schema_types_itr == collection_schema_types.end()){
+        collection_schema_types.emplace(authorized_creator, [&](auto &_schema_types) {
+            _schema_types.schema_name = schema_name;
+            _schema_types.format_type = schema_format_type;
+        });
+    } else {
+        collection_schema_types.modify(schema_types_itr, authorized_creator, [&](auto &_schema_types) {
+            _schema_types.format_type = schema_format_type;
+        });
+    }
+}
 
 /**
 *  Creates a new template
@@ -1479,6 +1539,9 @@ atomicassets::schemas_t atomicassets::get_schemas(name collection_name) {
     return schemas_t(get_self(), collection_name.value);
 }
 
+atomicassets::schema_types_t atomicassets::get_schema_types(name collection_name) {
+    return schema_types_t(get_self(), collection_name.value);
+}
 
 atomicassets::templates_t atomicassets::get_templates(name collection_name) {
     return templates_t(get_self(), collection_name.value);

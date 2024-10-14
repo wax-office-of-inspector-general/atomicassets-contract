@@ -93,6 +93,12 @@ public:
         vector <FORMAT> schema_format_extension
     );
 
+    ACTION setschematyp(
+        name authorized_creator,
+        name collection_name,
+        name schema_name,
+        vector <FORMAT_TYPE> schema_format_type
+    );
 
     ACTION createtempl(
         name authorized_creator,
@@ -279,6 +285,15 @@ private:
 
     typedef multi_index <name("schemas"), schemas_s> schemas_t;
 
+    //Scope: collection_name
+    TABLE schema_types_s {
+        name            schema_name;
+        vector <FORMAT_TYPE> format_type;
+
+        uint64_t primary_key() const { return schema_name.value; }
+    };
+
+    typedef multi_index <name("schematypes"), schema_types_s> schema_types_t;
 
     //Scope: collection_name
     TABLE templates_s {
@@ -406,6 +421,8 @@ private:
     assets_t get_assets(name acc);
 
     schemas_t get_schemas(name collection_name);
+
+    schema_types_t get_schema_types(name collection_name);
 
     templates_t get_templates(name collection_name);
 };
