@@ -419,7 +419,7 @@ ACTION atomicassets::createtempl(
     uint32_t max_supply,
     ATTRIBUTE_MAP immutable_data
 ) {  
-    create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data);
+    internal_create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data);
 }
 
 /**
@@ -437,7 +437,7 @@ ACTION atomicassets::createtempl2(
     ATTRIBUTE_MAP immutable_data,
     ATTRIBUTE_MAP mutable_data
 ) {  
-    create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, mutable_data);
+    internal_create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, mutable_data);
 }
 
 
@@ -652,7 +652,6 @@ ACTION atomicassets::setassetdata(
 ACTION atomicassets::settempldata(
     name authorized_editor,
     name collection_name,
-    name schema_name,
     int32_t template_id,
     ATTRIBUTE_MAP new_mutable_data
 ) {
@@ -668,13 +667,13 @@ ACTION atomicassets::settempldata(
         "The editor is not authorized within the collection"
     );
 
-    schemas_t collection_schemas = get_schemas(collection_name);
-    auto schema_itr = collection_schemas.require_find(schema_name.value,
-        "No schema with this name exists");
-
     templates_t collection_templates = get_templates(collection_name);
     auto template_itr = collection_templates.require_find(template_id,
         "No template with the specified id exists for the specified collection");
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(template_itr->schema_name.value,
+        "No schema with this name exists");
 
     check_name_length(new_mutable_data);
 
@@ -694,14 +693,14 @@ ACTION atomicassets::settempldata(
         permission_level{get_self(), name("active")},
         get_self(),
         name("logsetdatatl"),
-        make_tuple(collection_name, schema_name, template_id, deserialized_old_data, new_mutable_data)
+        make_tuple(collection_name, template_itr->schema_name, template_id, deserialized_old_data, new_mutable_data)
     ).send();
 
-    // If entry doesn't exist, then emplace entry
-    if (template_data_itr == template_data.end()){
+    // If entry doesn't exist && new_mutable_data is not empty, then emplace entry
+    if (template_data_itr == template_data.end() && new_mutable_data.size() > 0){
         template_data.emplace(authorized_editor, [&](auto &_template_data) {
             _template_data.template_id = template_id;
-            _template_data.schema_name = schema_name;
+            _template_data.schema_name = template_itr->schema_name;
             _template_data.mutable_serialized_data = serialize(new_mutable_data, schema_itr->format);
         });
     }
@@ -1289,10 +1288,10 @@ ACTION atomicassets::logburnasset(
 * Function for creating a template, handling both the creation of normal templates & purely mutable templates
 */
 
-void atomicassets::create_template(
-    name & authorized_creator,
-    name & collection_name,
-    name & schema_name,
+void atomicassets::internal_create_template(
+    name authorized_creator,
+    name collection_name,
+    name schema_name,
     bool transferable,
     bool burnable,
     uint32_t max_supply,
@@ -1318,10 +1317,8 @@ void atomicassets::create_template(
     int32_t template_id = current_config.template_counter++;
     config.set(current_config, get_self());
 
-    if (transferable == false){
-        check(burnable == true, 
-            "A template cannot be both non-transferable and non-burnable");
-    }
+    check(burnable || transferable, 
+        "A template cannot be both non-transferable and non-burnable");
 
     templates_t collection_templates = get_templates(collection_name);
 
@@ -1368,7 +1365,7 @@ void atomicassets::create_template(
             permission_level{get_self(), name("active")},
             get_self(),
             name("logsetdatatl"),
-            make_tuple(collection_name, schema_name, template_id, mutable_data, mutable_data)
+            make_tuple(collection_name, schema_name, template_id, (ATTRIBUTE_MAP){}, mutable_data)
         ).send();
     }
     

@@ -143,7 +143,6 @@ public:
     ACTION settempldata(
         name authorized_editor,
         name collection_name,
-        name schema_name,
         int32_t template_id,
         ATTRIBUTE_MAP new_mutable_data
     );
@@ -406,10 +405,10 @@ private:
     config_t       config       = config_t(get_self(), get_self().value);
     tokenconfigs_t tokenconfigs = tokenconfigs_t(get_self(), get_self().value);
 
-    void create_template(
-        name & authorized_creator,
-        name & collection_name,
-        name & schema_name,
+    void internal_create_template(
+        name authorized_creator,
+        name collection_name,
+        name schema_name,
         bool transferable,
         bool burnable,
         uint32_t max_supply,
