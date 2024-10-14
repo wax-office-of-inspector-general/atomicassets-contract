@@ -504,6 +504,48 @@ ACTION atomicassets::locktemplate(
 
 
 /**
+* Reduces the max supply of the template to the new max supply
+* This means that afterwards, NFTs can only be minted up to the new max supply
+* @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+**/
+
+ACTION atomicassets::redtemplmax(
+    name authorized_editor,
+    name collection_name,
+    int32_t template_id,
+    uint32_t new_max_supply
+) {
+    require_auth(authorized_editor);
+
+    auto collection_itr = collections.require_find(collection_name.value,
+        "No collection with this name exists");
+
+    check_has_collection_auth(
+        authorized_editor,
+        collection_name,
+        "The editor is not authorized within the collection"
+    );
+
+    templates_t collection_templates = get_templates(collection_name);
+    auto template_itr = collection_templates.require_find(template_id,
+        "No template with the specified id exists for the specified collection");
+
+    check(new_max_supply > 0, 
+        "The new max supply can't be set to zero (infinite)");
+
+    check(template_itr->issued_supply <= new_max_supply, 
+        "The new max supply can't be lower than the issued supply");
+
+    check(template_itr->max_supply == 0 || template_itr->max_supply > new_max_supply, 
+        "The new max supply must be lower than the existing max supply");
+
+    collection_templates.modify(template_itr, same_payer, [&](auto &_template) {
+        _template.max_supply = new_max_supply;
+    });
+
+}
+
+/**
 *  Creates a new asset
 *  Doesn't work if the template has a specified max_supply that has already been reached
 *  @required_auth authorized_minter, who is within the authorized_accounts list of the collection
