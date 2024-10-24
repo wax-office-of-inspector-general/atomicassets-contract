@@ -728,6 +728,12 @@ ACTION atomicassets::deltemplate(
     check(template_itr->issued_supply == 0,
         "Can't delete a template that has any assets issued");
 
+    template_mutables_t template_mutables = get_template_mutables(collection_name);
+    auto template_mutables_itr = template_mutables.find(template_id);
+    if (template_mutables_itr != template_mutables.end()){
+        template_mutables.erase(template_mutables_itr);
+    }
+
     collection_templates.erase(template_itr);
 }
 
