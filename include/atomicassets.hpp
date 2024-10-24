@@ -14,7 +14,7 @@ static constexpr double MAX_MARKET_FEE = 0.15;
 static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
 
 static const string MISSING_COLLECTION_AUTH = "Missing authorization for this collection";
-static const string COLLECTION_NOT_FOUND = "No collection with this name exists";
+static constexpr char COLLECTION_NOT_FOUND[] = "No collection with this name exists";
 
 CONTRACT atomicassets : public contract {
 public:

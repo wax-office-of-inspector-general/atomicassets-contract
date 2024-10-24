@@ -243,7 +243,7 @@ ACTION atomicassets::setcoldata(
     ATTRIBUTE_MAP data
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
 
@@ -284,7 +284,7 @@ ACTION atomicassets::addcolauth(
     name account_to_add
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
 
@@ -315,7 +315,7 @@ ACTION atomicassets::remcolauth(
     name account_to_remove
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
     vector <name> authorized_accounts = collection_itr->authorized_accounts;
@@ -347,7 +347,7 @@ ACTION atomicassets::addnotifyacc(
     name account_to_add
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
 
@@ -380,7 +380,7 @@ ACTION atomicassets::remnotifyacc(
     name account_to_remove
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
     vector <name> notify_accounts = collection_itr->notify_accounts;
@@ -409,7 +409,7 @@ ACTION atomicassets::setmarketfee(
     double market_fee
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
 
@@ -434,7 +434,7 @@ ACTION atomicassets::forbidnotify(
     name collection_name
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     require_auth(collection_itr->author);
 
@@ -461,7 +461,7 @@ ACTION atomicassets::createauswap(
     bool owner
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     if (owner){
         require_auth(permission_level{collection_itr->author, name("owner")});
@@ -491,7 +491,7 @@ ACTION atomicassets::acceptauswap(
     name collection_name
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     author_swaps_t authorswaps = get_author_swaps();
     auto author_swaps_itr = authorswaps.require_find(collection_name.value,
@@ -526,7 +526,7 @@ ACTION atomicassets::rejectauswap(
     name collection_name
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     author_swaps_t authorswaps = get_author_swaps();
     auto author_swaps_itr = authorswaps.require_find(collection_name.value,
@@ -556,7 +556,7 @@ ACTION atomicassets::createschema(
 ) {
 
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_creator,
@@ -591,7 +591,7 @@ ACTION atomicassets::extendschema(
     vector <FORMAT> schema_format_extension
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -626,7 +626,7 @@ ACTION atomicassets::setschematyp(
     vector <FORMAT_TYPE> schema_format_type
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -714,7 +714,7 @@ ACTION atomicassets::deltemplate(
     int32_t template_id
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -742,7 +742,7 @@ ACTION atomicassets::locktemplate(
     int32_t template_id
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -776,7 +776,7 @@ ACTION atomicassets::redtemplmax(
     uint32_t new_max_supply
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -819,7 +819,7 @@ ACTION atomicassets::mintasset(
     vector <asset> tokens_to_back
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_minter,
@@ -922,7 +922,7 @@ ACTION atomicassets::setassetdata(
         "No asset with this id exists");
 
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(asset_itr->collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(asset_itr->collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -968,7 +968,7 @@ ACTION atomicassets::settempldata(
     ATTRIBUTE_MAP new_mutable_data
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_editor,
@@ -1612,7 +1612,7 @@ void atomicassets::internal_create_template(
     ATTRIBUTE_MAP mutable_data
 ) { 
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     check_has_collection_auth(
         authorized_creator,
@@ -1846,7 +1846,7 @@ void atomicassets::notify_collection_accounts(
     name collection_name
 ) {
     collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
     for (const name &notify_account : collection_itr->notify_accounts) {
         require_recipient(notify_account);
