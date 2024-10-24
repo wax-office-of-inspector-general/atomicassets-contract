@@ -225,7 +225,6 @@ ACTION atomicassets::createcol(
     auto collections_data = get_collections_data();
     collections_data.emplace(author, [&](auto &_collection_data) {
         _collection_data.collection_name = collection_name;
-        _collection_data.author = author;
         _collection_data.serialized_data = serialize(data, current_config.collection_format);
     });
 }
@@ -258,7 +257,6 @@ ACTION atomicassets::setcoldata(
     if (collection_data_itr == collections_data.end()){
         collections_data.emplace(collection_itr->author, [&](auto &_collection_data){
             _collection_data.collection_name = collection_itr->collection_name;
-            _collection_data.author = collection_itr->author;
             _collection_data.serialized_data = serialize(data, current_config.collection_format);
         });
     } else {
@@ -1912,7 +1910,6 @@ void atomicassets::coldata_cleanup(name & collection_name, const collections_s &
     if (collection_data_itr == collections_data.end()){
         collections_data.emplace(collection_itr.author, [&](auto &_collection_data){
             _collection_data.collection_name = collection_itr.collection_name;
-            _collection_data.author = collection_itr.author;
             _collection_data.serialized_data = collection_itr.serialized_data;
         });
     }
