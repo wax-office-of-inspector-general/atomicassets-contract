@@ -1167,6 +1167,13 @@ ACTION atomicassets::burnasset(
         check(template_itr->burnable, "The asset is not burnable");
     };
 
+    holders_t holders = get_holders();
+
+    // Checks to see if the asset has been rented out & erases the "holdership"
+    auto holders_itr = holders.find(asset_id);
+    if (holders_itr != holders.end()){
+        holders.erase(holders_itr);
+    }    
 
     if (asset_itr->backed_tokens.size() != 0) {
         auto balances = get_balances();
