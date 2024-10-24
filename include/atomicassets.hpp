@@ -11,7 +11,10 @@ using namespace atomicdata;
 
 
 static constexpr double MAX_MARKET_FEE = 0.15;
+static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
+
 static const string MISSING_COLLECTION_AUTH = "Missing authorization for this collection";
+static const string COLLECTION_NOT_FOUND = "No collection with this name exists";
 
 CONTRACT atomicassets : public contract {
 public:
@@ -25,7 +28,6 @@ public:
 
     ACTION addconftoken(name token_contract, symbol token_symbol);
 
-
     ACTION transfer(
         name from,
         name to,
@@ -33,6 +35,13 @@ public:
         string memo
     );
 
+    ACTION move(
+        name owner,
+        name from,
+        name to,
+        vector <uint64_t> asset_ids,
+        string memo
+    );
 
     ACTION createcol(
         name author,
@@ -78,6 +87,19 @@ public:
         name collection_name
     );
 
+    ACTION createauswap(
+        name collection_name,
+        name new_author,
+        bool owner
+    );
+
+    ACTION acceptauswap(
+        name collection_name
+    );
+
+    ACTION rejectauswap(
+        name collection_name
+    );
 
     ACTION createschema(
         name authorized_creator,
@@ -93,6 +115,12 @@ public:
         vector <FORMAT> schema_format_extension
     );
 
+    ACTION setschematyp(
+        name authorized_editor,
+        name collection_name,
+        name schema_name,
+        vector <FORMAT_TYPE> schema_format_type
+    );
 
     ACTION createtempl(
         name authorized_creator,
@@ -103,6 +131,30 @@ public:
         uint32_t max_supply,
         ATTRIBUTE_MAP immutable_data
     );
+    
+    ACTION createtempl2(
+        name authorized_creator,
+        name collection_name,
+        name schema_name,
+        bool transferable,
+        bool burnable,
+        uint32_t max_supply,
+        ATTRIBUTE_MAP immutable_data,
+        ATTRIBUTE_MAP mutable_data
+    );
+
+    ACTION settempldata(
+        name authorized_editor,
+        name collection_name,
+        int32_t template_id,
+        ATTRIBUTE_MAP new_mutable_data
+    );
+
+    ACTION deltemplate(
+        name authorized_editor,
+        name collection_name,
+        int32_t template_id
+    );
 
     ACTION locktemplate(
         name authorized_editor,
@@ -110,6 +162,12 @@ public:
         int32_t template_id
     );
 
+    ACTION redtemplmax(
+        name authorized_editor,
+        name collection_name,
+        int32_t template_id,
+        uint32_t new_max_supply
+    );
 
     ACTION mintasset(
         name authorized_minter,
@@ -233,6 +291,14 @@ public:
         ATTRIBUTE_MAP new_data
     );
 
+    ACTION logsetdatatl(
+        name collection_name,
+        name schema_name,
+        int32_t template_id, 
+        ATTRIBUTE_MAP old_data,
+        ATTRIBUTE_MAP new_data
+    );
+
     ACTION logbackasset(
         name asset_owner,
         uint64_t asset_id,
@@ -253,6 +319,17 @@ public:
 
 
 private:
+
+    TABLE author_swaps_s {
+        name             collection_name;
+        name             current_author;
+        name             new_author;
+        uint32_t         acceptance_date;
+
+        uint64_t primary_key() const { return collection_name.value; };
+    };
+
+    typedef multi_index <name("authorswaps"), author_swaps_s> author_swaps_t;
 
     TABLE collections_s {
         name             collection_name;
@@ -279,6 +356,15 @@ private:
 
     typedef multi_index <name("schemas"), schemas_s> schemas_t;
 
+    //Scope: collection_name
+    TABLE schema_types_s {
+        name            schema_name;
+        vector <FORMAT_TYPE> format_type;
+
+        uint64_t primary_key() const { return schema_name.value; }
+    };
+
+    typedef multi_index <name("schematypes"), schema_types_s> schema_types_t;
 
     //Scope: collection_name
     TABLE templates_s {
@@ -295,6 +381,16 @@ private:
 
     typedef multi_index <name("templates"), templates_s> templates_t;
 
+    //Scope: collection_name
+    TABLE template_mutables_s {
+        int32_t          template_id;
+        name             schema_name;
+        vector <uint8_t> mutable_serialized_data;
+
+        uint64_t primary_key() const { return (uint64_t) template_id; }
+    };
+
+    typedef multi_index <name("tmplmutables"), template_mutables_s> template_mutables_t;
 
     //Scope: owner
     TABLE assets_s {
@@ -312,6 +408,18 @@ private:
 
     typedef multi_index <name("assets"), assets_s> assets_t;
 
+    TABLE holders_s {
+        uint64_t         asset_id;
+        name             holder;
+        name             owner;
+
+        uint64_t primary_key() const { return asset_id; };
+        uint64_t by_holder() const { return holder.value; };
+    };
+
+    typedef multi_index <name("holders"), holders_s,  
+        indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
+    holders_t;
 
     TABLE offers_s {
         uint64_t          offer_id;
@@ -361,31 +469,43 @@ private:
     typedef singleton <name("tokenconfigs"), tokenconfigs_s>   tokenconfigs_t;
 
     // Table Fetches
-    collections_t  get_collections() {return collections_t(get_self(), get_self().value);}
-    collections_t  get_collections_data() {return collections_t(get_self(), name("coldata").value);}
-    offers_t       get_offers() {return offers_t(get_self(), get_self().value);}
-    balances_t     get_balances() {return balances_t(get_self(), get_self().value);}
-    config_t       get_config() {return config_t(get_self(), get_self().value);}
-    tokenconfigs_t get_tokenconfigs() {return tokenconfigs_t(get_self(), get_self().value);}
+    author_swaps_t      get_author_swaps() {return author_swaps_t(get_self(), get_self().value);}
+    collections_t       get_collections() {return collections_t(get_self(), get_self().value);}
+    collections_t       get_collections_data() {return collections_t(get_self(), name("coldata").value);}
 
-    assets_t       get_assets(name acc) {return assets_t(get_self(), acc.value);}
-    schemas_t      get_schemas(name collection_name) {return schemas_t(get_self(), collection_name.value);}
-    templates_t    get_templates(name collection_name) {return templates_t(get_self(), collection_name.value);}
+    offers_t            get_offers() {return offers_t(get_self(), get_self().value);}
+    balances_t          get_balances() {return balances_t(get_self(), get_self().value);}
+    config_t            get_config() {return config_t(get_self(), get_self().value);}
+    tokenconfigs_t      get_tokenconfigs() {return tokenconfigs_t(get_self(), get_self().value);}
+
+    schemas_t           get_schemas(name collection_name) {return schemas_t(get_self(), collection_name.value);}
+    schema_types_t      get_schema_types(name collection_name) {return schema_types_t(get_self(), collection_name.value);}
+
+    templates_t         get_templates(name collection_name) {return templates_t(get_self(), collection_name.value);}
+    template_mutables_t get_template_mutables(name collection_name) {return template_mutables_t(get_self(), collection_name.value);}
+
+    assets_t            get_assets(name owner) {return assets_t(get_self(), owner.value);}
+    holders_t           get_holders() {return holders_t(get_self(), get_self().value);}
 
     // Internal Functions
+
+    void internal_create_template(
+        name authorized_creator,
+        name collection_name,
+        name schema_name,
+        bool transferable,
+        bool burnable,
+        uint32_t max_supply,
+        ATTRIBUTE_MAP & immutable_data,
+        ATTRIBUTE_MAP mutable_data = {}
+    );
+
     void internal_transfer(
         name from,
         name to,
         vector <uint64_t> asset_ids,
         string memo,
         name scope_payer
-    );
-
-    void internal_back_asset(
-        name ram_payer,
-        name asset_owner,
-        uint64_t asset_id,
-        asset back_quantity
     );
 
     void internal_decrease_balance(

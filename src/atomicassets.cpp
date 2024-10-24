@@ -85,6 +85,78 @@ ACTION atomicassets::transfer(
     internal_transfer(from, to, asset_ids, memo, from);
 }
 
+/**
+*  Moves one or more assets to another account
+*  @required_auth of the true owner of the asset
+*  Cannot have notifications for the from & to, exploitable
+*/
+ACTION atomicassets::move(
+    name owner,
+    name from,
+    name to,
+    vector <uint64_t> asset_ids,
+    string memo
+) {
+    require_auth(owner);
+    require_recipient(owner);
+
+    check(is_account(from), "from account does not exist");
+    check(is_account(to), "to account does not exist");
+
+    check(from != to, "from & to fields cannot be the same");
+
+    check(asset_ids.size() != 0, "asset_ids needs to contain at least one id");
+    check(memo.length() <= 256, "A move memo can only be 256 characters max");
+
+    vector <uint64_t> asset_ids_copy = asset_ids;
+    std::sort(asset_ids_copy.begin(), asset_ids_copy.end());
+    check(std::adjacent_find(asset_ids_copy.begin(), asset_ids_copy.end()) == asset_ids_copy.end(),
+        "Can't move the same asset multiple times");
+
+    assets_t owner_assets = get_assets(owner);
+    holders_t holders = get_holders();
+
+    for (uint64_t & asset_id : asset_ids) {
+        auto asset_itr = owner_assets.require_find(asset_id,
+            ("Owner doesn't own at least one of the provided assets (ID: " +
+             to_string(asset_id) + ")").c_str());
+
+        //Existence doesn't have to be checked because this always has to exist
+        if (asset_itr->template_id >= 0) {
+            templates_t collection_templates = get_templates(asset_itr->collection_name);
+
+            auto template_itr = collection_templates.find(asset_itr->template_id);
+            check(template_itr->transferable,
+                ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+        }
+
+        auto holders_itr = holders.find(asset_id);
+        if (holders_itr == holders.end()){
+            check(from == owner, 
+                ("Only the owner can move this asset (ID: " + to_string(asset_id) + ")").c_str());
+            // Emplaces new holder
+            holders.emplace(owner, [&](auto &_holders_row){
+                _holders_row.asset_id = asset_id;
+                _holders_row.holder = to;
+                _holders_row.owner = owner;
+            });
+        }
+
+        if (holders_itr != holders.end()){
+            check(holders_itr->holder == from, 
+                ("At least one asset invalidates the 'from:holder' constraint (ID: " + to_string(asset_id) + ")").c_str());
+
+            // Deletes row if returning to owner
+            if (to == owner){
+                holders.erase(holders_itr);
+            } else { // Modifies row to move holdership to the new "to" wallet
+                holders.modify(holders_itr, owner, [&](auto &_holders_row){
+                    _holders_row.holder = to;
+                });
+            }
+        }
+    }
+}
 
 /**
 *  Creates a new collection
@@ -100,7 +172,7 @@ ACTION atomicassets::createcol(
 ) {
     require_auth(author);
     
-    auto collections = get_collections();
+    collections_t collections = get_collections();
 
     name collection_name_suffix = collection_name.suffix();
 
@@ -170,9 +242,8 @@ ACTION atomicassets::setcoldata(
     name collection_name,
     ATTRIBUTE_MAP data
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
 
@@ -212,9 +283,8 @@ ACTION atomicassets::addcolauth(
     name collection_name,
     name account_to_add
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
 
@@ -244,9 +314,8 @@ ACTION atomicassets::remcolauth(
     name collection_name,
     name account_to_remove
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
     vector <name> authorized_accounts = collection_itr->authorized_accounts;
@@ -277,9 +346,8 @@ ACTION atomicassets::addnotifyacc(
     name collection_name,
     name account_to_add
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
 
@@ -311,9 +379,8 @@ ACTION atomicassets::remnotifyacc(
     name collection_name,
     name account_to_remove
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
     vector <name> notify_accounts = collection_itr->notify_accounts;
@@ -341,9 +408,8 @@ ACTION atomicassets::setmarketfee(
     name collection_name,
     double market_fee
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
 
@@ -367,9 +433,8 @@ ACTION atomicassets::setmarketfee(
 ACTION atomicassets::forbidnotify(
     name collection_name
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     require_auth(collection_itr->author);
 
@@ -385,6 +450,97 @@ ACTION atomicassets::forbidnotify(
     });
 }
 
+/**
+* Creates a swap offer for a collection
+* Acceptance functionality depends on the authorization being 'owner' or 'active' (7 days gate)
+*/
+
+ACTION atomicassets::createauswap(
+    name collection_name,
+    name new_author,
+    bool owner
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    if (owner){
+        require_auth(permission_level{collection_itr->author, name("owner")});
+    } else {
+        require_auth(collection_itr->author);
+    }
+
+    author_swaps_t authorswaps = get_author_swaps();
+    check(authorswaps.find(collection_name.value) == authorswaps.end(), 
+        "Can't swap author's while an authorswap is underway for this collection");
+
+    authorswaps.emplace(collection_itr->author, [&](auto &_author_swaps) {
+        _author_swaps.collection_name = collection_name;
+        _author_swaps.current_author = collection_itr->author;
+        _author_swaps.new_author = new_author;
+        _author_swaps.acceptance_date = eosio::current_time_point().sec_since_epoch() + (owner ? 0 : AUTHOR_SWAP_TIME_DELTA);
+    });
+}
+
+/**
+* Accepts an author swap, with time constraints based on 'owner' or 'active' permissions used when creating the author swap
+* With default parameters, author swaps created by 'active' permissions can only be accepted after 1 week has passed
+* With default parameters, author swaps remain valid for up to 3 weeks
+*/
+
+ACTION atomicassets::acceptauswap(
+    name collection_name
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    author_swaps_t authorswaps = get_author_swaps();
+    auto author_swaps_itr = authorswaps.require_find(collection_name.value,
+        "No author swaps for this collection found");
+
+    // Just in case**
+    check(collection_itr->author == author_swaps_itr->current_author, 
+        "Current author mismatch");
+
+    require_auth(author_swaps_itr->new_author);
+
+    uint32_t now = eosio::current_time_point().sec_since_epoch();
+
+    check (now > author_swaps_itr->acceptance_date, 
+        ("[ " + to_string(author_swaps_itr->acceptance_date - now) + " ] seconds remaining until this author swap can be accepted").c_str());
+
+    check (now < author_swaps_itr->acceptance_date + AUTHOR_SWAP_TIME_DELTA, "Author swap for this collection has expired");
+
+    collections.modify(collection_itr, author_swaps_itr->new_author, [&](auto &_collection){
+        _collection.author = author_swaps_itr->new_author;
+    });
+
+    authorswaps.erase(author_swaps_itr);
+}
+
+/**
+* Rejects author swaps
+* Can be used by either the current author or by the new author
+*/
+
+ACTION atomicassets::rejectauswap(
+    name collection_name
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    author_swaps_t authorswaps = get_author_swaps();
+    auto author_swaps_itr = authorswaps.require_find(collection_name.value,
+        "No author swaps for this collection found");
+
+    // Just in case**
+    check(collection_itr->author == author_swaps_itr->current_author, 
+        "Current author mismatch");
+
+    check(has_auth(author_swaps_itr->current_author) || has_auth(author_swaps_itr->new_author), 
+        "Missing required authorizations");
+
+    authorswaps.erase(author_swaps_itr);
+}
 
 /**
 *  Creates a new schema
@@ -399,9 +555,8 @@ ACTION atomicassets::createschema(
     vector <FORMAT> schema_format
 ) {
 
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     check_has_collection_auth(
         authorized_creator,
@@ -435,9 +590,8 @@ ACTION atomicassets::extendschema(
     name schema_name,
     vector <FORMAT> schema_format_extension
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     check_has_collection_auth(
         authorized_editor,
@@ -459,6 +613,62 @@ ACTION atomicassets::extendschema(
     });
 }
 
+/**
+*  Emplaces or modifies a schematype for a schema
+*  Can be used as a descriptor of a schema's attributes (i.e. "Rarity"::"Provides X bonuses to this NFT")
+*  Can also be used as a media type for a schema attribute (i.e. denoting an IPFS hash with a particular file type, like .obj or .gltf for 3D files)
+*  @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+*/
+ACTION atomicassets::setschematyp(
+    name authorized_editor,
+    name collection_name,
+    name schema_name,
+    vector <FORMAT_TYPE> schema_format_type
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    check_has_collection_auth(
+        authorized_editor,
+        *collection_itr
+    );
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(schema_name.value,
+        "Schema name not found within the collection");
+
+    schema_types_t collection_schema_types = get_schema_types(collection_name);
+    auto schema_types_itr = collection_schema_types.find(schema_name.value);
+
+    auto & schema_format = schema_itr->format;
+
+    // Check to see if all elements in schema_format_type have unique names && exist within the schema_format
+    std::set<std::string> format_type_set;
+    for (FORMAT_TYPE & format_type_itr : schema_format_type){
+        check(format_type_set.find(format_type_itr.name) == format_type_set.end(), 
+            "Schema format type cannot contain duplicate entries");
+
+        check(std::find_if(
+                schema_format.begin(), schema_format.end(), 
+                    [&format_type_itr](auto & format_itr) 
+                        { return format_type_itr.name == format_itr.name; })
+            != schema_format.end(), 
+                ("No attribute in the Schema format matches the Schema format type of '" + format_type_itr.name + "'").c_str());
+
+        format_type_set.insert(format_type_itr.name);
+    }
+
+    if (schema_types_itr == collection_schema_types.end()){
+        collection_schema_types.emplace(authorized_editor, [&](auto &_schema_types) {
+            _schema_types.schema_name = schema_name;
+            _schema_types.format_type = schema_format_type;
+        });
+    } else {
+        collection_schema_types.modify(schema_types_itr, authorized_editor, [&](auto &_schema_types) {
+            _schema_types.format_type = schema_format_type;
+        });
+    }
+}
 
 /**
 *  Creates a new template
@@ -473,53 +683,53 @@ ACTION atomicassets::createtempl(
     uint32_t max_supply,
     ATTRIBUTE_MAP immutable_data
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    internal_create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data);
+}
+
+/**
+*  Creates a new template with explicit mutable data fields
+*  @required_auth authorized_creator, who is within the authorized_accounts list of the collection
+*/
+
+ACTION atomicassets::createtempl2(
+    name authorized_creator,
+    name collection_name,
+    name schema_name,
+    bool transferable,
+    bool burnable,
+    uint32_t max_supply,
+    ATTRIBUTE_MAP immutable_data,
+    ATTRIBUTE_MAP mutable_data
+) {  
+    internal_create_template(authorized_creator, collection_name, schema_name, transferable, burnable, max_supply, immutable_data, mutable_data);
+}
+
+/**
+* Deletes a template if the issued supply is zero
+* @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+**/
+ACTION atomicassets::deltemplate(
+    name authorized_editor,
+    name collection_name,
+    int32_t template_id
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     check_has_collection_auth(
-        authorized_creator,
+        authorized_editor,
         *collection_itr
     );
 
-    schemas_t collection_schemas = get_schemas(collection_name);
-    auto schema_itr = collection_schemas.require_find(schema_name.value,
-        "No schema with this name exists");
-
-    auto config = get_config();
-    config_s current_config = config.get();
-    int32_t template_id = current_config.template_counter++;
-    config.set(current_config, get_self());
-
     templates_t collection_templates = get_templates(collection_name);
+    auto template_itr = collection_templates.require_find(template_id,
+        "No template with the specified id exists for the specified collection");
 
-    collection_templates.emplace(authorized_creator, [&](auto &_template) {
-        _template.template_id = template_id;
-        _template.schema_name = schema_name;
-        _template.transferable = transferable;
-        _template.burnable = burnable;
-        _template.max_supply = max_supply;
-        _template.issued_supply = 0;
-        _template.immutable_serialized_data = serialize(immutable_data, schema_itr->format);
-    });
+    check(template_itr->issued_supply == 0,
+        "Can't delete a template that has any assets issued");
 
-    action(
-        permission_level{get_self(), name("active")},
-        get_self(),
-        name("lognewtempl"),
-        make_tuple(
-            template_id,
-            authorized_creator,
-            collection_name,
-            schema_name,
-            transferable,
-            burnable,
-            max_supply,
-            immutable_data
-        )
-    ).send();
+    collection_templates.erase(template_itr);
 }
-
 
 /**
 * Sets the max supply of the template to the issued supply
@@ -531,9 +741,8 @@ ACTION atomicassets::locktemplate(
     name collection_name,
     int32_t template_id
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     check_has_collection_auth(
         authorized_editor,
@@ -554,6 +763,44 @@ ACTION atomicassets::locktemplate(
     });
 }
 
+/**
+* Reduces the max supply of the template to the new max supply
+* This means that afterwards, NFTs can only be minted up to the new max supply
+* @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+**/
+
+ACTION atomicassets::redtemplmax(
+    name authorized_editor,
+    name collection_name,
+    int32_t template_id,
+    uint32_t new_max_supply
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    check_has_collection_auth(
+        authorized_editor,
+        *collection_itr
+    );
+
+    templates_t collection_templates = get_templates(collection_name);
+    auto template_itr = collection_templates.require_find(template_id,
+        "No template with the specified id exists for the specified collection");
+
+    check(new_max_supply > 0, 
+        "The new max supply can't be set to zero (infinite)");
+
+    check(template_itr->issued_supply <= new_max_supply, 
+        "The new max supply can't be lower than the issued supply");
+
+    check(template_itr->max_supply == 0 || template_itr->max_supply > new_max_supply, 
+        "The new max supply must be lower than the existing max supply");
+
+    collection_templates.modify(template_itr, same_payer, [&](auto &_template) {
+        _template.max_supply = new_max_supply;
+    });
+
+}
 
 /**
 *  Creates a new asset
@@ -571,9 +818,8 @@ ACTION atomicassets::mintasset(
     ATTRIBUTE_MAP mutable_data,
     vector <asset> tokens_to_back
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     check_has_collection_auth(
         authorized_minter,
@@ -654,17 +900,8 @@ ACTION atomicassets::mintasset(
         )
     ).send();
 
-    //Calls the internal_back_asset function which handles asset backing.
-    //It will throw if authorized_minter does not have a sufficient balance to pay for the backed tokens
-    //Token validity must not be cross-checked with config.supported_tokens because it's implicitly checked
-    //when decreasing minter's balance (only supported tokens can be deposited)
-    set <symbol> used_symbols = {};
-    for (asset &token : tokens_to_back) {
-        check(used_symbols.find(token.symbol) == used_symbols.end(),
-            "Symbols in the tokens_to_back must be unique");
-        used_symbols.emplace(token.symbol);
-        internal_back_asset(authorized_minter, new_asset_owner, asset_id, token);
-    }
+    check(tokens_to_back.size() == 0, 
+            "Native backing has been deprecated on the AtomicAssets Contract");
 }
 
 
@@ -684,8 +921,8 @@ ACTION atomicassets::setassetdata(
     auto asset_itr = owner_assets.require_find(asset_id,
         "No asset with this id exists");
 
-    auto collections = get_collections();
-    auto collection_itr = collections.find(asset_itr->collection_name.value);
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(asset_itr->collection_name.value, "COL NOT FOUND");
 
     check_has_collection_auth(
         authorized_editor,
@@ -716,6 +953,79 @@ ACTION atomicassets::setassetdata(
     });
 }
 
+/**
+*  Updates the mutable data of a template within the templatedata table
+*  If the row doesn't exist within the template, it emplaces a new row
+*  If the new_mutable_data is empty & the row exists, it eraes the row
+*  @required_auth authorized_editor, who is within the authorized_accounts list of the collection
+                  specified in the related template
+*/
+
+ACTION atomicassets::settempldata(
+    name authorized_editor,
+    name collection_name,
+    int32_t template_id,
+    ATTRIBUTE_MAP new_mutable_data
+) {
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    check_has_collection_auth(
+        authorized_editor,
+        *collection_itr
+    );
+
+    templates_t collection_templates = get_templates(collection_name);
+    auto template_itr = collection_templates.require_find(template_id,
+        "No template with the specified id exists for the specified collection");
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(template_itr->schema_name.value,
+        "No schema with this name exists");
+
+    check_name_length(new_mutable_data);
+
+    template_mutables_t template_mutables = get_template_mutables(collection_name);
+    auto template_mutables_itr = template_mutables.find(template_id);
+
+    ATTRIBUTE_MAP deserialized_old_data;
+
+    if (template_mutables_itr != template_mutables.end()){
+        deserialized_old_data = deserialize(
+            template_mutables_itr->mutable_serialized_data,
+            schema_itr->format
+        );
+    }
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("logsetdatatl"),
+        make_tuple(collection_name, template_itr->schema_name, template_id, deserialized_old_data, new_mutable_data)
+    ).send();
+
+    // If entry doesn't exist && new_mutable_data is not empty, then emplace entry
+    if (template_mutables_itr == template_mutables.end() && new_mutable_data.size() > 0){
+        template_mutables.emplace(authorized_editor, [&](auto &_template_mutables) {
+            _template_mutables.template_id = template_id;
+            _template_mutables.schema_name = template_itr->schema_name;
+            _template_mutables.mutable_serialized_data = serialize(new_mutable_data, schema_itr->format);
+        });
+    }
+
+    // If entry exists && new_mutable_data is not empty, then modify entry
+    if (template_mutables_itr != template_mutables.end() && new_mutable_data.size() > 0){
+        template_mutables.modify(template_mutables_itr, authorized_editor, [&](auto &_template_mutables) {
+            _template_mutables.mutable_serialized_data = serialize(new_mutable_data, schema_itr->format);
+        });
+    }
+
+    // If entry exists && new_mutable_data is empty, then erase entry
+    if (template_mutables_itr != template_mutables.end() && new_mutable_data.size() == 0){
+        template_mutables.erase(template_mutables_itr);
+    }
+
+}
 
 /**
 * This action is used to add a zero value asset to the quantities vector of owner in the balances table
@@ -823,9 +1133,8 @@ ACTION atomicassets::backasset(
     uint64_t asset_id,
     asset token_to_back
 ) {
-    require_auth(payer);
-
-    internal_back_asset(payer, asset_owner, asset_id, token_to_back);
+    check(false, 
+        "Native backing has been deprecated on the AtomicAssets Contract");
 }
 
 
@@ -1250,6 +1559,18 @@ ACTION atomicassets::logsetdata(
     notify_collection_accounts(asset_itr->collection_name);
 }
 
+ACTION atomicassets::logsetdatatl(
+    name collection_name,
+    name schema_name,
+    int32_t template_id, 
+    ATTRIBUTE_MAP old_data,
+    ATTRIBUTE_MAP new_data
+) {
+    require_auth(get_self());
+
+    notify_collection_accounts(collection_name);
+}
+
 
 ACTION atomicassets::logbackasset(
     name asset_owner,
@@ -1257,13 +1578,6 @@ ACTION atomicassets::logbackasset(
     asset backed_token
 ) {
     require_auth(get_self());
-
-    require_recipient(asset_owner);
-
-    assets_t owner_assets = get_assets(asset_owner);
-    auto asset_itr = owner_assets.find(asset_id);
-
-    notify_collection_accounts(asset_itr->collection_name);
 }
 
 
@@ -1283,6 +1597,90 @@ ACTION atomicassets::logburnasset(
     notify_collection_accounts(collection_name);
 }
 
+/**
+* Function for creating a template, handling both the creation of normal templates & purely mutable templates
+*/
+
+void atomicassets::internal_create_template(
+    name authorized_creator,
+    name collection_name,
+    name schema_name,
+    bool transferable,
+    bool burnable,
+    uint32_t max_supply,
+    ATTRIBUTE_MAP & immutable_data,
+    ATTRIBUTE_MAP mutable_data
+) { 
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
+
+    check_has_collection_auth(
+        authorized_creator,
+        *collection_itr
+    );
+
+    schemas_t collection_schemas = get_schemas(collection_name);
+    auto schema_itr = collection_schemas.require_find(schema_name.value,
+        "No schema with this name exists");
+
+    config_t config = get_config();
+    config_s current_config = config.get();
+    int32_t template_id = current_config.template_counter++;
+    config.set(current_config, get_self());
+
+    check(burnable || transferable, 
+        "A template cannot be both non-transferable and non-burnable");
+
+    templates_t collection_templates = get_templates(collection_name);
+
+    check_name_length(immutable_data);
+    collection_templates.emplace(authorized_creator, [&](auto &_template) {
+        _template.template_id = template_id;
+        _template.schema_name = schema_name;
+        _template.transferable = transferable;
+        _template.burnable = burnable;
+        _template.max_supply = max_supply;
+        _template.issued_supply = 0;
+        if (immutable_data.size() > 0){
+            _template.immutable_serialized_data = serialize(immutable_data, schema_itr->format);
+        }
+    });
+
+    action(
+        permission_level{get_self(), name("active")},
+        get_self(),
+        name("lognewtempl"),
+        make_tuple(
+            template_id,
+            authorized_creator,
+            collection_name,
+            schema_name,
+            transferable,
+            burnable,
+            max_supply,
+            immutable_data
+        )
+    ).send();
+
+    if (mutable_data.size() > 0){
+        check_name_length(mutable_data);
+
+        template_mutables_t template_mutables = get_template_mutables(collection_name);
+        template_mutables.emplace(authorized_creator, [&](auto &_template_mutables) {
+            _template_mutables.template_id = template_id;
+            _template_mutables.schema_name = schema_name;
+            _template_mutables.mutable_serialized_data = serialize(mutable_data, schema_itr->format);
+        });
+
+        action(
+            permission_level{get_self(), name("active")},
+            get_self(),
+            name("logsetdatatl"),
+            make_tuple(collection_name, schema_name, template_id, (ATTRIBUTE_MAP){}, mutable_data)
+        ).send();
+    }
+
+}
 
 /**
 *  Transfers need to be handled like this (as a function instead of an action), because when accepting an offer,
@@ -1314,6 +1712,7 @@ void atomicassets::internal_transfer(
 
     assets_t from_assets = get_assets(from);
     assets_t to_assets = get_assets(to);
+    holders_t holders = get_holders();
 
     map <name, vector <uint64_t>> collection_to_assets_transferred = {};
 
@@ -1329,6 +1728,19 @@ void atomicassets::internal_transfer(
             auto template_itr = collection_templates.find(asset_itr->template_id);
             check(template_itr->transferable,
                 ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+        }
+
+        auto holders_itr = holders.find(asset_id);
+        if (holders_itr != holders.end()){
+
+            // Deletes row if transfering to holder
+            if (to == holders_itr->holder){
+                holders.erase(holders_itr);
+            } else { // Modifies row to move ownership to the new "to" wallet
+                holders.modify(holders_itr, from, [&](auto &_holders_row){
+                    _holders_row.owner = to;
+                });
+            }
         }
 
         //This is needed for sending notifications later
@@ -1386,60 +1798,6 @@ void atomicassets::internal_transfer(
     }
 }
 
-
-/**
-*  The specified asset is backed by the specified quantitiy.
-*  This is done in an internal function because it is needed both in the mintasset and the backasset action
-*/
-void atomicassets::internal_back_asset(
-    name payer,
-    name asset_owner,
-    uint64_t asset_id,
-    asset token_to_back
-) {
-    check(token_to_back.amount > 0, "token_to_back must be positive");
-
-    //The internal_decrease_balance function will throw if payer does not have a sufficient balance
-    internal_decrease_balance(payer, token_to_back);
-
-    assets_t owner_assets = get_assets(asset_owner);
-    auto asset_itr = owner_assets.require_find(asset_id,
-        "The specified owner does not own the asset with the specified ID");
-
-    if (asset_itr->template_id != -1) {
-        templates_t collection_templates = get_templates(asset_itr->collection_name);
-
-        auto template_itr = collection_templates.find(asset_itr->template_id);
-        check(template_itr->burnable, "The asset is not burnable. Only burnable assets can be backed.");
-    }
-
-    vector <asset> backed_tokens = asset_itr->backed_tokens;
-    bool found_backed_token = false;
-    for (asset &token : backed_tokens) {
-        if (token.symbol == token_to_back.symbol) {
-            found_backed_token = true;
-            token.amount += token_to_back.amount;
-            break;
-        }
-    }
-    if (!found_backed_token) {
-        backed_tokens.push_back(token_to_back);
-    }
-
-    owner_assets.modify(asset_itr, payer, [&](auto &_asset) {
-        _asset.ram_payer = payer;
-        _asset.backed_tokens = backed_tokens;
-    });
-
-    action(
-        permission_level{get_self(), name("active")},
-        get_self(),
-        name("logbackasset"),
-        make_tuple(asset_owner, asset_id, token_to_back)
-    ).send();
-}
-
-
 /**
 *  Decreases the balance of a specified account by a specified quantity
 *  If the specified account does not have at least as much tokens in the balance as should be removed
@@ -1487,9 +1845,8 @@ void atomicassets::internal_decrease_balance(
 void atomicassets::notify_collection_accounts(
     name collection_name
 ) {
-    auto collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value,
-        "No collection with this name exists");
+    collections_t collections = get_collections();
+    auto collection_itr = collections.require_find(collection_name.value, "COL NOT FOUND");
 
     for (const name &notify_account : collection_itr->notify_accounts) {
         require_recipient(notify_account);
