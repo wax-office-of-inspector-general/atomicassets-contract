@@ -320,6 +320,12 @@ public:
 
 private:
 
+    /*
+        **************
+        *** Tables ***
+        **************
+    */
+
     TABLE author_swaps_s {
         name             collection_name;
         name             current_author;
@@ -328,8 +334,8 @@ private:
 
         uint64_t primary_key() const { return collection_name.value; };
     };
-
     typedef multi_index <name("authorswaps"), author_swaps_s> author_swaps_t;
+
 
     TABLE collections_s {
         name             collection_name;
@@ -342,7 +348,6 @@ private:
 
         uint64_t primary_key() const { return collection_name.value; };
     };
-
     typedef multi_index <name("collections"), collections_s> collections_t;
 
 
@@ -353,8 +358,8 @@ private:
 
         uint64_t primary_key() const { return schema_name.value; }
     };
-
     typedef multi_index <name("schemas"), schemas_s> schemas_t;
+
 
     //Scope: collection_name
     TABLE schema_types_s {
@@ -363,8 +368,8 @@ private:
 
         uint64_t primary_key() const { return schema_name.value; }
     };
-
     typedef multi_index <name("schematypes"), schema_types_s> schema_types_t;
+
 
     //Scope: collection_name
     TABLE templates_s {
@@ -378,8 +383,8 @@ private:
 
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
-
     typedef multi_index <name("templates"), templates_s> templates_t;
+
 
     //Scope: collection_name
     TABLE template_mutables_s {
@@ -389,8 +394,8 @@ private:
 
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
-
     typedef multi_index <name("tmplmutables"), template_mutables_s> template_mutables_t;
+
 
     //Scope: owner
     TABLE assets_s {
@@ -405,8 +410,8 @@ private:
 
         uint64_t primary_key() const { return asset_id; };
     };
-
     typedef multi_index <name("assets"), assets_s> assets_t;
+
 
     TABLE holders_s {
         uint64_t         asset_id;
@@ -416,10 +421,10 @@ private:
         uint64_t primary_key() const { return asset_id; };
         uint64_t by_holder() const { return holder.value; };
     };
-
     typedef multi_index <name("holders"), holders_s,  
         indexed_by<name("holder"), const_mem_fun <holders_s, uint64_t, &holders_s::by_holder>>>
     holders_t;
+
 
     TABLE offers_s {
         uint64_t          offer_id;
@@ -436,11 +441,11 @@ private:
 
         uint64_t by_recipient() const { return recipient.value; };
     };
-
     typedef multi_index <name("offers"), offers_s,
         indexed_by < name("sender"), const_mem_fun < offers_s, uint64_t, &offers_s::by_sender>>,
     indexed_by <name("recipient"), const_mem_fun < offers_s, uint64_t, &offers_s::by_recipient>>>
     offers_t;
+
 
     TABLE balances_s {
         name           owner;
@@ -448,7 +453,6 @@ private:
 
         uint64_t primary_key() const { return owner.value; };
     };
-
     typedef multi_index <name("balances"), balances_s>         balances_t;
 
 
@@ -464,11 +468,16 @@ private:
 
     TABLE tokenconfigs_s {
         name        standard = name("atomicassets");
-        std::string version  = string("1.3.1");
+        std::string version  = string("2.0.0");
     };
     typedef singleton <name("tokenconfigs"), tokenconfigs_s>   tokenconfigs_t;
 
-    // Table Fetches
+    /*
+        *********************
+        *** Table Fetches ***
+        *********************
+    */
+
     author_swaps_t      get_author_swaps() {return author_swaps_t(get_self(), get_self().value);}
     collections_t       get_collections() {return collections_t(get_self(), get_self().value);}
     collections_t       get_collections_data() {return collections_t(get_self(), name("coldata").value);}
@@ -487,7 +496,11 @@ private:
     assets_t            get_assets(name owner) {return assets_t(get_self(), owner.value);}
     holders_t           get_holders() {return holders_t(get_self(), get_self().value);}
 
-    // Internal Functions
+    /*
+        **************************
+        *** Internal Functions ***
+        **************************
+    */
 
     void internal_create_template(
         name authorized_creator,
