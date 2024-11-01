@@ -117,23 +117,31 @@ ACTION atomicassets::move(
     holders_t holders = get_holders();
 
     for (uint64_t & asset_id : asset_ids) {
-        auto asset_itr = owner_assets.require_find(asset_id,
-            ("Owner doesn't own at least one of the provided assets (ID: " +
-             to_string(asset_id) + ")").c_str());
+        auto asset_itr = owner_assets.find(asset_id);
+        if (asset_itr == owner_assets.end()){
+            check(false,
+                ("Owner doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
+        }
+            
 
         //Existence doesn't have to be checked because this always has to exist
         if (asset_itr->template_id >= 0) {
             templates_t collection_templates = get_templates(asset_itr->collection_name);
 
             auto template_itr = collection_templates.find(asset_itr->template_id);
-            check(template_itr->transferable,
-                ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            if (!template_itr->transferable){
+                check(false,
+                    ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            }
         }
 
         auto holders_itr = holders.find(asset_id);
         if (holders_itr == holders.end()){
-            check(from == owner, 
-                ("Only the owner can move this asset (ID: " + to_string(asset_id) + ")").c_str());
+            if (from != owner){
+                check(false, 
+                    ("Only the owner can move this asset (ID: " + to_string(asset_id) + ")").c_str());
+            }
+                
             // Emplaces new holder
             holders.emplace(owner, [&](auto &_holders_row){
                 _holders_row.asset_id = asset_id;
@@ -143,8 +151,10 @@ ACTION atomicassets::move(
         }
 
         if (holders_itr != holders.end()){
-            check(holders_itr->holder == from, 
-                ("At least one asset invalidates the 'from:holder' constraint (ID: " + to_string(asset_id) + ")").c_str());
+            if (holders_itr->holder != from){
+                check(false, 
+                    ("At least one asset invalidates the 'from:holder' constraint (ID: " + to_string(asset_id) + ")").c_str());
+            }
 
             // Deletes row if returning to owner
             if (to == owner){
@@ -220,12 +230,7 @@ ACTION atomicassets::createcol(
         _collection.authorized_accounts = authorized_accounts;
         _collection.notify_accounts = notify_accounts;
         _collection.market_fee = market_fee;
-    });
-
-    auto collections_data = get_collections_data();
-    collections_data.emplace(author, [&](auto &_collection_data) {
-        _collection_data.collection_name = collection_name;
-        _collection_data.serialized_data = serialize(data, current_config.collection_format);
+        _collection.serialized_data = serialize(data, current_config.collection_format);
     });
 }
 
@@ -234,7 +239,6 @@ ACTION atomicassets::createcol(
 *  Sets the collection data, which is then serialized with the collection format set in the config
 *  This data is used by 3rd party apps and sites to display additional information about the collection
 *  Uses get_self() scope for interacting with smart contracts
-*  Uses 'coldata' scope for housing serialized collection data
 *  @required_auth The collection author
 */
 ACTION atomicassets::setcoldata(
@@ -251,22 +255,8 @@ ACTION atomicassets::setcoldata(
     auto config = get_config();
     config_s current_config = config.get();
 
-    auto collections_data = get_collections_data();
-    auto collection_data_itr = collections_data.find(collection_name.value);
-    
-    if (collection_data_itr == collections_data.end()){
-        collections_data.emplace(collection_itr->author, [&](auto &_collection_data){
-            _collection_data.collection_name = collection_itr->collection_name;
-            _collection_data.serialized_data = serialize(data, current_config.collection_format);
-        });
-    } else {
-         collections_data.modify(collection_data_itr, same_payer, [&](auto &_collection_data){
-            _collection_data.serialized_data = serialize(data, current_config.collection_format);
-        });
-    }
-
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
-        _collection.serialized_data.clear();
+        _collection.serialized_data = serialize(data, current_config.collection_format);
     });
 }
 
@@ -274,6 +264,7 @@ ACTION atomicassets::setcoldata(
 /**
 *  Adds an account to the authorized_accounts list of a collection
 *  This will allow the account to create and edit both templates and assets that belong to this collection
+*  Limit of 24 authorized accounts to allow low level reading of collections row for CPU optimizations
 *  @required_atuh The collection author
 */
 
@@ -295,11 +286,10 @@ ACTION atomicassets::addcolauth(
 
     authorized_accounts.push_back(account_to_add);
 
-    coldata_cleanup(collection_name, *collection_itr);
+    check(authorized_accounts.size() <= 24, "Can only have up to 24 authorized accounts");
     
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
         _collection.authorized_accounts = authorized_accounts;
-        _collection.serialized_data.clear();
     });
 }
 
@@ -324,11 +314,8 @@ ACTION atomicassets::remcolauth(
         "The account is not an authorized account");
     authorized_accounts.erase(account_itr);
 
-    coldata_cleanup(collection_name, *collection_itr);
-
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
         _collection.authorized_accounts = authorized_accounts;
-        _collection.serialized_data.clear();
     });
 }
 
@@ -338,6 +325,7 @@ ACTION atomicassets::remcolauth(
 *  This will make the account get notified on every relevant action concerning this collection using require_recipient()
 *  NOTE: It will consequently allow the account to make any of these actions throw (fail).
 *        Only add trusted accounts to this list
+*  Limit of 24 notify accounts to allow low level reading of collections row for CPU optimizations
 *  @required_atuh The collection author
 */
 ACTION atomicassets::addnotifyacc(
@@ -360,11 +348,10 @@ ACTION atomicassets::addnotifyacc(
 
     notify_accounts.push_back(account_to_add);
 
-    coldata_cleanup(collection_name, *collection_itr);    
+    check(notify_accounts.size() <= 24, "Can only have up to 24 notify accounts");
 
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
         _collection.notify_accounts = notify_accounts;
-        _collection.serialized_data.clear();
     });
 }
 
@@ -389,11 +376,8 @@ ACTION atomicassets::remnotifyacc(
         "The account is not a notify account");
     notify_accounts.erase(account_itr);
 
-    coldata_cleanup(collection_name, *collection_itr);
-
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
         _collection.notify_accounts = notify_accounts;
-        _collection.serialized_data.clear();
     });
 }
 
@@ -414,11 +398,8 @@ ACTION atomicassets::setmarketfee(
     check(0 <= market_fee && market_fee <= MAX_MARKET_FEE,
         "The market_fee must be between 0 and " + to_string(MAX_MARKET_FEE));
 
-    coldata_cleanup(collection_name, *collection_itr);
-
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
         _collection.market_fee = market_fee;
-        _collection.serialized_data.clear();
     });
 }
 
@@ -440,11 +421,8 @@ ACTION atomicassets::forbidnotify(
 
     check(collection_itr->allow_notify, "allow_notify is already false for this collection");
 
-    coldata_cleanup(collection_name, *collection_itr);
-
     collections.modify(collection_itr, same_payer, [&](auto &_collection) {
         _collection.allow_notify = false;
-        _collection.serialized_data.clear();
     });
 }
 
@@ -552,13 +530,9 @@ ACTION atomicassets::createschema(
     name schema_name,
     vector <FORMAT> schema_format
 ) {
-
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_creator,
-        *collection_itr
+        collection_name
     );
 
     schemas_t collection_schemas = get_schemas(collection_name);
@@ -588,12 +562,9 @@ ACTION atomicassets::extendschema(
     name schema_name,
     vector <FORMAT> schema_format_extension
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     check(schema_format_extension.size() != 0, "Need to add at least one new line");
@@ -623,12 +594,9 @@ ACTION atomicassets::setschematyp(
     name schema_name,
     vector <FORMAT_TYPE> schema_format_type
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     schemas_t collection_schemas = get_schemas(collection_name);
@@ -711,12 +679,9 @@ ACTION atomicassets::deltemplate(
     name collection_name,
     int32_t template_id
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     templates_t collection_templates = get_templates(collection_name);
@@ -745,12 +710,9 @@ ACTION atomicassets::locktemplate(
     name collection_name,
     int32_t template_id
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     check(template_id >= 0, "The template id must be positive");
@@ -779,12 +741,9 @@ ACTION atomicassets::redtemplmax(
     int32_t template_id,
     uint32_t new_max_supply
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     templates_t collection_templates = get_templates(collection_name);
@@ -822,12 +781,9 @@ ACTION atomicassets::mintasset(
     ATTRIBUTE_MAP mutable_data,
     vector <asset> tokens_to_back
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_minter,
-        *collection_itr
+        collection_name
     );
 
     schemas_t collection_schemas = get_schemas(collection_name);
@@ -925,12 +881,11 @@ ACTION atomicassets::setassetdata(
     auto asset_itr = owner_assets.require_find(asset_id,
         "No asset with this id exists");
 
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(asset_itr->collection_name.value, COLLECTION_NOT_FOUND);
+    name collection_name = asset_itr->collection_name;
 
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     check_name_length(new_mutable_data);
@@ -971,12 +926,9 @@ ACTION atomicassets::settempldata(
     int32_t template_id,
     ATTRIBUTE_MAP new_mutable_data
 ) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_editor,
-        *collection_itr
+        collection_name
     );
 
     templates_t collection_templates = get_templates(collection_name);
@@ -1277,27 +1229,36 @@ ACTION atomicassets::createoffer(
     assets_t recipient_assets = get_assets(recipient);
 
     for (uint64_t asset_id : sender_asset_ids) {
-        auto asset_itr = sender_assets.require_find(asset_id,
-            ("Offer sender doesn't own at least one of the provided assets (ID: " +
-             to_string(asset_id) + ")").c_str());
+        auto asset_itr = sender_assets.find(asset_id);
+        if (asset_itr == sender_assets.end()){
+            check(false, 
+                ("Offer sender doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
+        }
+
         if (asset_itr->template_id >= 0) {
             templates_t collection_templates = get_templates(asset_itr->collection_name);
 
             auto template_itr = collection_templates.find(asset_itr->template_id);
-            check(template_itr->transferable,
-                ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            if (!template_itr->transferable){
+                check(false,
+                    ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            }
         }
     }
     for (uint64_t asset_id : recipient_asset_ids) {
-        auto asset_itr = recipient_assets.require_find(asset_id,
-            ("Offer recipient doesn't own at least one of the provided assets (ID: " +
-             to_string(asset_id) + ")").c_str());
+        auto asset_itr = recipient_assets.find(asset_id);
+        if (asset_itr == recipient_assets.end()){
+            check(false, 
+                ("Offer recipient doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
+        }
         if (asset_itr->template_id >= 0) {
             templates_t collection_templates = get_templates(asset_itr->collection_name);
 
             auto template_itr = collection_templates.find(asset_itr->template_id);
-            check(template_itr->transferable,
-                ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            if (!template_itr->transferable){
+                check(false,
+                    ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            }
         }
     }
 
@@ -1365,14 +1326,18 @@ ACTION atomicassets::acceptoffer(
     assets_t sender_assets = get_assets(offer_itr->sender);
     assets_t recipient_assets = get_assets(offer_itr->recipient);
     for (uint64_t asset_id : offer_itr->sender_asset_ids) {
-        sender_assets.require_find(asset_id,
-            ("Offer sender doesn't own at least one of the provided assets (ID: " +
-             to_string(asset_id) + ")").c_str());
+        auto asset_itr = sender_assets.find(asset_id);
+        if (asset_itr == sender_assets.end()){
+            check(false, 
+                ("Offer sender doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
+        }
     }
     for (uint64_t asset_id : offer_itr->recipient_asset_ids) {
-        recipient_assets.require_find(asset_id,
-            ("Offer recipient doesn't own at least one of the provided assets (ID: " +
-             to_string(asset_id) + ")").c_str());
+        auto asset_itr = recipient_assets.find(asset_id);
+        if (asset_itr == recipient_assets.end()){
+            check(false, 
+                ("Offer recipient doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
+        }
     }
 
     if (offer_itr->recipient_asset_ids.size() != 0) {
@@ -1622,12 +1587,9 @@ void atomicassets::internal_create_template(
     ATTRIBUTE_MAP & immutable_data,
     ATTRIBUTE_MAP mutable_data
 ) { 
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
-
     check_has_collection_auth(
         authorized_creator,
-        *collection_itr
+        collection_name
     );
 
     schemas_t collection_schemas = get_schemas(collection_name);
@@ -1728,17 +1690,21 @@ void atomicassets::internal_transfer(
     map <name, vector <uint64_t>> collection_to_assets_transferred = {};
 
     for (uint64_t asset_id : asset_ids) {
-        auto asset_itr = from_assets.require_find(asset_id,
-            ("Sender doesn't own at least one of the provided assets (ID: " +
-             to_string(asset_id) + ")").c_str());
+        auto asset_itr = from_assets.find(asset_id);
+        if (asset_itr == from_assets.end()){
+            check(false, 
+                ("Sender doesn't own at least one of the provided assets (ID: " + to_string(asset_id) + ")").c_str());
+        }
 
         //Existence doesn't have to be checked because this always has to exist
         if (asset_itr->template_id >= 0) {
             templates_t collection_templates = get_templates(asset_itr->collection_name);
 
             auto template_itr = collection_templates.find(asset_itr->template_id);
-            check(template_itr->transferable,
-                ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            if (!template_itr->transferable){
+                check(false, 
+                    ("At least one asset isn't transferable (ID: " + to_string(asset_id) + ")").c_str());
+            }
         }
 
         auto holders_itr = holders.find(asset_id);
@@ -1851,37 +1817,134 @@ void atomicassets::internal_decrease_balance(
 
 
 /**
-* Notifies all of a collection's notify accounts using require_recipient
-*/
-void atomicassets::notify_collection_accounts(
-    name collection_name
-) {
-    collections_t collections = get_collections();
-    auto collection_itr = collections.require_find(collection_name.value, COLLECTION_NOT_FOUND);
 
-    for (const name &notify_account : collection_itr->notify_accounts) {
-        require_recipient(notify_account);
+        **********************
+        ***Low Level Kungfu***
+        **********************
+
+* When retrieving a table's row, if any indice except a key is accessed, all of the row's data is loaded into cache
+* The serialized_data vector for collections can contain a ton of data, up to 3-4kb in some cases. 
+
+* 'notify_collection_accounts' & 'check_has_collection_auth' functions are used throughout the entire smart contract, sometimes several times due to inline actions
+* So even though these functions only need their respesctive vector<name> fields, the contract is still forced to load the row into cache
+
+* This ends up being a rather significant performance pitfall, as it's an unnecessary CPU tax when interacting with AtomicAssets
+* The solution below utilizes low level host functions to perform a partial memory read to directly access a set amount of bytes for increased CPU performance
+
+* General Bytes Math = 
+    + 128               // Row + Primary Key, will always be 128
+    + (8 * 6)           // For the six other indices, will always be (8 * 6) = 48
+    + 32                // For collection_name, author, allow_notify & market_fee, fixed size will always be 32
+    + 72                // For authorized_accounts, notify_accounts & serialized_data, fixed size for just the vectors will always be 72
+    + (8 * R={1|48})    // 8 Bytes for each element in the notify_accounts & authorized_accounts, up to 24 for each, total ranging from 8 = 384
+
+* Total Bytes R={288|664}     
+* The upper limit of 664 can be used to "Safely" capture all data, except serialized data, accepting an upper limit of up to 48 notify/authorized accounts
+
+* In practice, this can be further reduced, as the fields in the row are deserialized sequentially & we only care about the specific vector <name> fields
+
+    TABLE collections_s {
+        name             collection_name;
+        name             author;
+        bool             allow_notify;
+        vector <name>    authorized_accounts;
+        vector <name>    notify_accounts;
+
+        *********************************
+        Everything below here can be safely ignored for this process
+        *********************************
+
+        double           market_fee; 
+        vector <uint8_t> serialized_data;
+
+        uint64_t primary_key() const { return collection_name.value; };
+    };
+
+* Authorized Bytes Math = 
+    + 128               // Row + Primary Key
+    + 8 + 8             // author index + type = 16
+    + 8 + 1 + 7         // allow_notify index + type + alignment / padding = 16
+    + 24                // authorized_accounts vector
+    + (8 * R={1|24})    // 8 Bytes for each element in the authorized_accounts, up to 24, total ranging from 8 to 192
+
+* Total Bytes R={192|376}
+
+* Notify Bytes Math = 
+    + 128               // Row + Primary Key
+    + 8 + 8             // author index + type = 16
+    + 8 + 1 + 7         // allow_notify index + type + alignment / padding = 16
+    + 24 + 24           // authorized_accounts + notify_accounts vectors
+    + (8 * R={1|48})    // 8 Bytes for each element in the authorized_accounts, up to 24, total ranging from 8 to 384
+
+* Total Bytes R={216|592}
+
+*/
+
+vector<name> atomicassets::partial_read_collection(
+    name & collection_name_,
+    bool type
+) {
+
+    int collection_itr = eosio::internal_use_do_not_use::db_find_i64(get_self().value, get_self().value, name("collections").value, collection_name_.value);
+    check(collection_itr >= 0, COLLECTION_NOT_FOUND);
+
+    int data_size = eosio::internal_use_do_not_use::db_get_i64(collection_itr, nullptr, 0);
+    check(data_size > 0, COLLECTION_NOT_FOUND);
+
+    int read_size = min(data_size, !type ? 376 : 592); // Authorized Accounts vs Notify Accounts
+    vector<char> buffer(read_size);
+    eosio::internal_use_do_not_use::db_get_i64(collection_itr, buffer.data(), read_size);
+
+    datastream<const char*> ds(buffer.data(), buffer.size());
+
+    name collection_name, author;
+    bool allow_notify;
+    vector<name> authorized_accounts, notify_accounts;
+
+    ds >> collection_name;
+    ds >> author;
+    ds >> allow_notify;
+    ds >> authorized_accounts;
+    ds >> notify_accounts;
+    
+    if (!type){
+        return authorized_accounts;
+    } else {
+        return notify_accounts;
     }
 }
-
 
 /**
 * Checks if the account_to_check is in the authorized_accounts vector of the specified collection
 */
 void atomicassets::check_has_collection_auth(
     name & account_to_check,
-    const collections_s & collection_itr
+    name & collection_name
 ) {
     require_auth(account_to_check);
 
+    vector<name> authorized_accounts = partial_read_collection(collection_name, false);
+
     check(std::find(
-        collection_itr.authorized_accounts.begin(),
-        collection_itr.authorized_accounts.end(),
+        authorized_accounts.begin(),
+        authorized_accounts.end(),
         account_to_check
-        ) != collection_itr.authorized_accounts.end(),
-        MISSING_COLLECTION_AUTH);
+        ) != authorized_accounts.end(),
+        "Missing authorization for this collection");
 }
 
+/**
+* Notifies all of a collection's notify accounts using require_recipient
+*/
+void atomicassets::notify_collection_accounts(
+    name collection_name
+) {
+    vector<name> notify_accounts = partial_read_collection(collection_name, true);
+
+    for (name & notify_account : notify_accounts) {
+        require_recipient(notify_account);
+    }
+}
 
 /**
 * The "name" attribute is limited to 64 characters max for both assets and collections
@@ -1900,17 +1963,3 @@ void atomicassets::check_name_length(
     }
 }
 
-/**
-* Performs cleanup operation of serialized_data for collections & emplaces it into collections_data
-*/
-void atomicassets::coldata_cleanup(name & collection_name, const collections_s & collection_itr) {
-    auto collections_data = get_collections_data();
-    auto collection_data_itr = collections_data.find(collection_name.value);
-
-    if (collection_data_itr == collections_data.end()){
-        collections_data.emplace(collection_itr.author, [&](auto &_collection_data){
-            _collection_data.collection_name = collection_itr.collection_name;
-            _collection_data.serialized_data = collection_itr.serialized_data;
-        });
-    }
-}

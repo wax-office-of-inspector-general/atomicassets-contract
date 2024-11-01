@@ -129,7 +129,7 @@ namespace atomicassets {
 
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
-    typedef multi_index <name("tmplmutables"), template_mutables_s> template_mutables_t;
+    typedef multi_index <name("templates2"), template_mutables_s> template_mutables_t;
 
 
     //Scope: owner
@@ -215,7 +215,6 @@ namespace atomicassets {
 
     author_swaps_t      get_author_swaps() {return author_swaps_t(get_self(), get_self().value);}
     collections_t       get_collections() {return collections_t(get_self(), get_self().value);}
-    collections_t       get_collections_data() {return collections_t(get_self(), name("coldata").value);}
 
     offers_t            get_offers() {return offers_t(get_self(), get_self().value);}
     balances_t          get_balances() {return balances_t(get_self(), get_self().value);}

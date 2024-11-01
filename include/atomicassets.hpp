@@ -13,7 +13,6 @@ using namespace atomicdata;
 static constexpr double MAX_MARKET_FEE = 0.15;
 static constexpr uint32_t AUTHOR_SWAP_TIME_DELTA = 60 * 60 * 24 * 7; // 1 week, valid for 1 week
 
-static const string MISSING_COLLECTION_AUTH = "Missing authorization for this collection";
 static constexpr char COLLECTION_NOT_FOUND[] = "No collection with this name exists";
 
 CONTRACT atomicassets : public contract {
@@ -394,7 +393,7 @@ private:
 
         uint64_t primary_key() const { return (uint64_t) template_id; }
     };
-    typedef multi_index <name("tmplmutables"), template_mutables_s> template_mutables_t;
+    typedef multi_index <name("templates2"), template_mutables_s> template_mutables_t;
 
 
     //Scope: owner
@@ -480,7 +479,6 @@ private:
 
     author_swaps_t      get_author_swaps() {return author_swaps_t(get_self(), get_self().value);}
     collections_t       get_collections() {return collections_t(get_self(), get_self().value);}
-    collections_t       get_collections_data() {return collections_t(get_self(), name("coldata").value);}
 
     offers_t            get_offers() {return offers_t(get_self(), get_self().value);}
     balances_t          get_balances() {return balances_t(get_self(), get_self().value);}
@@ -526,17 +524,20 @@ private:
         asset quantity
     );
 
-    void notify_collection_accounts(
-        name collection_name
+    vector<name> partial_read_collection(
+        name & collection_name_,
+        bool type
     );
 
     void check_has_collection_auth(
         name & account_to_check,
-        const collections_s & collection_itr
+        name & collection_name
+    );
+
+    void notify_collection_accounts(
+        name collection_name
     );
 
     void check_name_length(ATTRIBUTE_MAP & data);
-
-    void coldata_cleanup(name & collection_name, const collections_s & collection_itr);
 
 };
