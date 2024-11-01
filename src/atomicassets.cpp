@@ -1864,19 +1864,19 @@ void atomicassets::internal_decrease_balance(
     + 128               // Row + Primary Key
     + 8 + 8             // author index + type = 16
     + 8 + 1 + 7         // allow_notify index + type + alignment / padding = 16
-    + 24                // authorized_accounts vector
+    + 24 + 8            // authorized_accounts vector + index = 32
     + (8 * R={1|24})    // 8 Bytes for each element in the authorized_accounts, up to 24, total ranging from 8 to 192
 
-* Total Bytes R={192|376}
+* Total Bytes R={200|384}
 
 * Notify Bytes Math = 
     + 128               // Row + Primary Key
     + 8 + 8             // author index + type = 16
     + 8 + 1 + 7         // allow_notify index + type + alignment / padding = 16
-    + 24 + 24           // authorized_accounts + notify_accounts vectors
+    + 24 + 24 + 16      // authorized_accounts + notify_accounts vectors + indices = 64
     + (8 * R={1|48})    // 8 Bytes for each element in the authorized_accounts, up to 24, total ranging from 8 to 384
 
-* Total Bytes R={216|592}
+* Total Bytes R={232|608}
 
 */
 
@@ -1891,7 +1891,7 @@ vector<name> atomicassets::partial_read_collection(
     int data_size = eosio::internal_use_do_not_use::db_get_i64(collection_itr, nullptr, 0);
     check(data_size > 0, COLLECTION_NOT_FOUND);
 
-    int read_size = min(data_size, !type ? 376 : 592); // Authorized Accounts vs Notify Accounts
+    int read_size = min(data_size, !type ? 384 : 608); // Authorized Accounts vs Notify Accounts
     vector<char> buffer(read_size);
     eosio::internal_use_do_not_use::db_get_i64(collection_itr, buffer.data(), read_size);
 
