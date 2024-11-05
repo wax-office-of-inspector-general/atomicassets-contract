@@ -250,6 +250,15 @@ public:
         string memo
     );
 
+    ACTION logmove(
+        name collection_name,
+        name owner,
+        name from,
+        name to,
+        vector <uint64_t> asset_ids,
+        string memo
+    );
+
     ACTION lognewoffer(
         uint64_t offer_id,
         name sender,

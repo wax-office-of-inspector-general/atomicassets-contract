@@ -116,6 +116,8 @@ ACTION atomicassets::move(
     assets_t owner_assets = get_assets(owner);
     holders_t holders = get_holders();
 
+    map <name, vector <uint64_t>> collection_to_assets_moved = {};
+
     for (uint64_t & asset_id : asset_ids) {
         auto asset_itr = owner_assets.find(asset_id);
         if (asset_itr == owner_assets.end()){
@@ -165,6 +167,24 @@ ACTION atomicassets::move(
                 });
             }
         }
+
+        //This is needed for sending notifications later
+        if (collection_to_assets_moved.find(asset_itr->collection_name) !=
+            collection_to_assets_moved.end()) {
+            collection_to_assets_moved[asset_itr->collection_name].push_back(asset_id);
+        } else {
+            collection_to_assets_moved[asset_itr->collection_name] = {asset_id};
+        }
+    }
+
+    // Sending notifications
+    for (const auto&[collection, assets_moved] : collection_to_assets_moved) {
+        action(
+            permission_level{get_self(), name("active")},
+            get_self(),
+            name("logmove"),
+            make_tuple(collection, owner, from, to, assets_moved, memo)
+        ).send();
     }
 }
 
@@ -1459,6 +1479,19 @@ void atomicassets::receive_token_transfer(name from, name to, asset quantity, st
 
 ACTION atomicassets::logtransfer(
     name collection_name,
+    name from,
+    name to,
+    vector <uint64_t> asset_ids,
+    string memo
+) {
+    require_auth(get_self());
+
+    notify_collection_accounts(collection_name);
+}
+
+ACTION atomicassets::logmove(
+    name collection_name,
+    name owner,
     name from,
     name to,
     vector <uint64_t> asset_ids,
