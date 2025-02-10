@@ -1865,14 +1865,13 @@ void atomicassets::internal_decrease_balance(
 * The solution below utilizes low level host functions to perform a partial memory read to directly access a set amount of bytes for increased CPU performance
 
 * General Bytes Math = 
-    + 128               // Row + Primary Key, will always be 128
-    + (8 * 6)           // For the six other indices, will always be (8 * 6) = 48
-    + 32                // For collection_name, author, allow_notify & market_fee, fixed size will always be 32
-    + 72                // For authorized_accounts, notify_accounts & serialized_data, fixed size for just the vectors will always be 72
+    + 128               // Row + uin64_t collection_name Primary Key, will always be 128
+    + 8 + 1 + 8         // For author, allow_notify & market_fee, will always be 17
+    + 1 + 1 + 2         // For authorized_accounts, notify_accounts & serialized_data, the size of the vector itself is dependant on the number of elements, will be 4 (to be safe). <255 = 1, <65565 = 2, etc.
     + (8 * R={1|48})    // 8 Bytes for each element in the notify_accounts & authorized_accounts, up to 24 for each, total ranging from 8 = 384
 
-* Total Bytes R={288|664}     
-* The upper limit of 664 can be used to "Safely" capture all data, except serialized data, accepting an upper limit of up to 48 notify/authorized accounts
+* Total Bytes R={157|533}     
+* The upper limit of 533 can be used to "Safely" capture all data, except serialized data, accepting an upper limit of up to 48 notify/authorized accounts
 
 * In practice, this can be further reduced, as the fields in the row are deserialized sequentially & we only care about the specific vector <name> fields
 
@@ -1894,22 +1893,19 @@ void atomicassets::internal_decrease_balance(
     };
 
 * Authorized Bytes Math = 
-    + 128               // Row + Primary Key
-    + 8 + 8             // author index + type = 16
-    + 8 + 1 + 7         // allow_notify index + type + alignment / padding = 16
-    + 24 + 8            // authorized_accounts vector + index = 32
-    + (8 * R={1|24})    // 8 Bytes for each element in the authorized_accounts, up to 24, total ranging from 8 to 192
+    + 128               // Row + uint64_t collection_name Primary Key
+    + 8 + 1             // For author & allow_notify, will always be 9
+    + 1 + (8 * R={1|24})// authorized_accounts vector + 8 Bytes for each element, up to 24, total ranging from 1 + (8 to 192)
 
-* Total Bytes R={200|384}
+* Total Bytes R={146|330}
 
 * Notify Bytes Math = 
-    + 128               // Row + Primary Key
-    + 8 + 8             // author index + type = 16
-    + 8 + 1 + 7         // allow_notify index + type + alignment / padding = 16
-    + 24 + 24 + 16      // authorized_accounts + notify_accounts vectors + indices = 64
-    + (8 * R={1|48})    // 8 Bytes for each element in the authorized_accounts, up to 24, total ranging from 8 to 384
+    + 128               // Row + uint64_t collection_name Primary Key
+    + 8 + 1             // For author & allow_notify, will always be 9
+    + 2                 // authorized_accounts + notify_accounts vectors = 2
+    + (8 * R={25|48})   // Assuming max authorized_accounts, 8 Bytes for each element in authorized_accounts & notify_accounts, up to 24, total ranging from 200 to 384
 
-* Total Bytes R={232|608}
+* Total Bytes R={339|523}
 
 */
 
@@ -1924,7 +1920,7 @@ vector<name> atomicassets::partial_read_collection(
     int data_size = eosio::internal_use_do_not_use::db_get_i64(collection_itr, nullptr, 0);
     check(data_size > 0, COLLECTION_NOT_FOUND);
 
-    int read_size = min(data_size, !type ? 384 : 608); // Authorized Accounts vs Notify Accounts
+    int read_size = min(data_size, !type ? 330 : 523); // Authorized Accounts vs Notify Accounts
     vector<char> buffer(read_size);
     eosio::internal_use_do_not_use::db_get_i64(collection_itr, buffer.data(), read_size);
 
